@@ -55,7 +55,7 @@ function App() {
       <header>
         <div className="header-content">
           <img src={logo} alt="Logo" className="header-logo" />
-          <h1>ZTP Server</h1>
+          <h1>ZTP Manager</h1>
         </div>
       </header>
 
@@ -92,7 +92,7 @@ function App() {
 
       <footer className="footer">
         <div className="footer-content">
-          <span className="footer-text">ZTP Server</span>
+          <span className="footer-text">ZTP Manager</span>
           <div className="footer-actions">
             <button
               className="theme-toggle"

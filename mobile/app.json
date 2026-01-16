@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ZTP Loader",
-    "slug": "ztp-loader",
+    "name": "ZTP Manager",
+    "slug": "ztp-manager",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ztpserver.loader"
+      "bundleIdentifier": "com.ztpserver.manager"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +23,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.ztpserver.loader",
+      "package": "com.ztpserver.manager",
       "permissions": ["android.permission.CAMERA"]
     },
     "web": {
@@ -33,7 +33,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow ZTP Loader to access your camera to scan device barcodes."
+          "cameraPermission": "Allow ZTP Manager to access your camera to scan device barcodes."
         }
       ]
     ]
