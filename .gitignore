@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+web-build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Database
+*.db
+*.db-journal
+
+# Backup files
+*.bak
+*.backup
+
+# TypeScript
+*.tsbuildinfo
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin*
+
+# Expo / React Native
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+.metro-health-check*
+
+# Generated native folders (Expo)
+mobile/ios/
+mobile/android/
+mobile/.kotlin/
+mobile/expo-env.d.ts
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Docker volumes (local dev)
+data/
+backups/
+tftp/
+
+# Certificates
+*.pem
+*.crt
+*.cert
+
+# Temporary files
+tmp/
+temp/
+*.tmp
