@@ -1,0 +1,91 @@
+# Development compose with live reload
+# Usage: docker compose -f docker-compose.dev.yml up
+#
+# Frontend: Runs Vite dev server with hot reload on port 5173
+# Backend: Runs Go server with Air for hot reload on port 8080
+
+services:
+  # Go backend with hot reload using Air
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: backend-dev
+    container_name: ztp-backend-dev
+    hostname: ztp-server
+    networks:
+      ztp-net:
+        ipv4_address: 172.30.0.2
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - ztp-data:/data
+      - ztp-tftp:/tftp
+      - ztp-backups:/backups
+      - ./configs/templates:/configs/templates:ro
+      - go-cache:/go/pkg/mod
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DB_PATH=/data/ztp.db
+      - TFTP_DIR=/tftp
+      - BACKUP_DIR=/backups
+      - TEMPLATES_DIR=/configs/templates
+      - DNSMASQ_CONFIG=/dnsmasq/dnsmasq.conf
+      - LEASE_PATH=/var/lib/misc/dnsmasq.leases
+      - LISTEN_ADDR=:8080
+      - DEV_MODE=true
+    restart: unless-stopped
+
+  # Vite dev server with hot reload
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: frontend-dev
+    container_name: ztp-frontend-dev
+    networks:
+      - ztp-net
+    ports:
+      - "5174:5173"
+    volumes:
+      - ./frontend:/app
+      - ./shared:/shared
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://ztp-server:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  test-client:
+    build:
+      context: ./test-client
+      dockerfile: Dockerfile
+    container_name: ztp-test-client
+    hostname: test-switch
+    networks:
+      ztp-net:
+        ipv4_address: 172.30.0.99
+    mac_address: "02:42:ac:1e:00:99"
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - backend
+    profiles:
+      - test
+
+networks:
+  ztp-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+
+volumes:
+  ztp-data:
+  ztp-tftp:
+  ztp-backups:
+  go-cache:

@@ -68,6 +68,42 @@ func (s *Store) migrate() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_backups_device ON backups(device_mac);
+
+	CREATE TABLE IF NOT EXISTS vendors (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		backup_command TEXT DEFAULT 'show running-config',
+		ssh_port INTEGER DEFAULT 22,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS dhcp_options (
+		id TEXT PRIMARY KEY,
+		option_number INTEGER NOT NULL,
+		name TEXT NOT NULL,
+		value TEXT DEFAULT '',
+		type TEXT DEFAULT 'string',
+		vendor_id TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_dhcp_options_vendor ON dhcp_options(vendor_id);
+
+	CREATE TABLE IF NOT EXISTS templates (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		description TEXT DEFAULT '',
+		vendor_id TEXT DEFAULT '',
+		content TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_templates_vendor ON templates(vendor_id);
 	`
 
 	if _, err := s.db.Exec(schema); err != nil {
@@ -92,6 +128,9 @@ func (s *Store) migrate() error {
 	// Migration: Add serial_number column if it doesn't exist
 	s.db.Exec("ALTER TABLE devices ADD COLUMN serial_number TEXT DEFAULT ''")
 
+	// Migration: Add vendor column if it doesn't exist
+	s.db.Exec("ALTER TABLE devices ADD COLUMN vendor TEXT DEFAULT ''")
+
 	return nil
 }
 
@@ -100,7 +139,7 @@ func (s *Store) migrate() error {
 // ListDevices returns all devices
 func (s *Store) ListDevices() ([]models.Device, error) {
 	rows, err := s.db.Query(`
-		SELECT mac, ip, hostname, serial_number, config_template, ssh_user, ssh_pass,
+		SELECT mac, ip, hostname, vendor, serial_number, config_template, ssh_user, ssh_pass,
 		       status, last_seen, last_backup, created_at, updated_at
 		FROM devices ORDER BY hostname
 	`)
@@ -114,7 +153,7 @@ func (s *Store) ListDevices() ([]models.Device, error) {
 		var d models.Device
 		var lastSeen, lastBackup sql.NullTime
 		err := rows.Scan(
-			&d.MAC, &d.IP, &d.Hostname, &d.SerialNumber, &d.ConfigTemplate,
+			&d.MAC, &d.IP, &d.Hostname, &d.Vendor, &d.SerialNumber, &d.ConfigTemplate,
 			&d.SSHUser, &d.SSHPass, &d.Status,
 			&lastSeen, &lastBackup, &d.CreatedAt, &d.UpdatedAt,
 		)
@@ -139,11 +178,11 @@ func (s *Store) GetDevice(mac string) (*models.Device, error) {
 	var lastSeen, lastBackup sql.NullTime
 
 	err := s.db.QueryRow(`
-		SELECT mac, ip, hostname, serial_number, config_template, ssh_user, ssh_pass,
+		SELECT mac, ip, hostname, vendor, serial_number, config_template, ssh_user, ssh_pass,
 		       status, last_seen, last_backup, created_at, updated_at
 		FROM devices WHERE mac = ?
 	`, mac).Scan(
-		&d.MAC, &d.IP, &d.Hostname, &d.SerialNumber, &d.ConfigTemplate,
+		&d.MAC, &d.IP, &d.Hostname, &d.Vendor, &d.SerialNumber, &d.ConfigTemplate,
 		&d.SSHUser, &d.SSHPass, &d.Status,
 		&lastSeen, &lastBackup, &d.CreatedAt, &d.UpdatedAt,
 	)
@@ -172,9 +211,9 @@ func (s *Store) CreateDevice(d *models.Device) error {
 	d.Status = "offline"
 
 	_, err := s.db.Exec(`
-		INSERT INTO devices (mac, ip, hostname, serial_number, config_template, ssh_user, ssh_pass, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, d.MAC, d.IP, d.Hostname, d.SerialNumber, d.ConfigTemplate, d.SSHUser, d.SSHPass, d.Status, d.CreatedAt, d.UpdatedAt)
+		INSERT INTO devices (mac, ip, hostname, vendor, serial_number, config_template, ssh_user, ssh_pass, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, d.MAC, d.IP, d.Hostname, d.Vendor, d.SerialNumber, d.ConfigTemplate, d.SSHUser, d.SSHPass, d.Status, d.CreatedAt, d.UpdatedAt)
 
 	return err
 }
@@ -184,10 +223,10 @@ func (s *Store) UpdateDevice(d *models.Device) error {
 	d.UpdatedAt = time.Now()
 
 	result, err := s.db.Exec(`
-		UPDATE devices SET ip = ?, hostname = ?, serial_number = ?, config_template = ?,
+		UPDATE devices SET ip = ?, hostname = ?, vendor = ?, serial_number = ?, config_template = ?,
 		       ssh_user = ?, ssh_pass = ?, updated_at = ?
 		WHERE mac = ?
-	`, d.IP, d.Hostname, d.SerialNumber, d.ConfigTemplate, d.SSHUser, d.SSHPass, d.UpdatedAt, d.MAC)
+	`, d.IP, d.Hostname, d.Vendor, d.SerialNumber, d.ConfigTemplate, d.SSHUser, d.SSHPass, d.UpdatedAt, d.MAC)
 	if err != nil {
 		return err
 	}
@@ -302,4 +341,305 @@ func (s *Store) ListBackups(mac string) ([]models.Backup, error) {
 	}
 
 	return backups, rows.Err()
+}
+
+// Vendor operations
+
+// ListVendors returns all vendors with device counts
+func (s *Store) ListVendors() ([]models.Vendor, error) {
+	rows, err := s.db.Query(`
+		SELECT v.id, v.name, v.backup_command, v.ssh_port, v.created_at, v.updated_at,
+		       COALESCE(COUNT(d.mac), 0) as device_count
+		FROM vendors v
+		LEFT JOIN devices d ON d.vendor = v.id
+		GROUP BY v.id
+		ORDER BY v.name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var vendors []models.Vendor
+	for rows.Next() {
+		var v models.Vendor
+		if err := rows.Scan(&v.ID, &v.Name, &v.BackupCommand, &v.SSHPort, &v.CreatedAt, &v.UpdatedAt, &v.DeviceCount); err != nil {
+			return nil, err
+		}
+		vendors = append(vendors, v)
+	}
+
+	return vendors, rows.Err()
+}
+
+// GetVendor returns a vendor by ID
+func (s *Store) GetVendor(id string) (*models.Vendor, error) {
+	var v models.Vendor
+	err := s.db.QueryRow(`
+		SELECT v.id, v.name, v.backup_command, v.ssh_port, v.created_at, v.updated_at,
+		       COALESCE(COUNT(d.mac), 0) as device_count
+		FROM vendors v
+		LEFT JOIN devices d ON d.vendor = v.id
+		WHERE v.id = ?
+		GROUP BY v.id
+	`, id).Scan(&v.ID, &v.Name, &v.BackupCommand, &v.SSHPort, &v.CreatedAt, &v.UpdatedAt, &v.DeviceCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// CreateVendor creates a new vendor
+func (s *Store) CreateVendor(v *models.Vendor) error {
+	now := time.Now()
+	v.CreatedAt = now
+	v.UpdatedAt = now
+
+	_, err := s.db.Exec(`
+		INSERT INTO vendors (id, name, backup_command, ssh_port, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, v.ID, v.Name, v.BackupCommand, v.SSHPort, v.CreatedAt, v.UpdatedAt)
+
+	return err
+}
+
+// UpdateVendor updates an existing vendor
+func (s *Store) UpdateVendor(v *models.Vendor) error {
+	v.UpdatedAt = time.Now()
+
+	result, err := s.db.Exec(`
+		UPDATE vendors SET name = ?, backup_command = ?, ssh_port = ?, updated_at = ?
+		WHERE id = ?
+	`, v.Name, v.BackupCommand, v.SSHPort, v.UpdatedAt, v.ID)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("vendor not found: %s", v.ID)
+	}
+
+	return nil
+}
+
+// DeleteVendor removes a vendor
+func (s *Store) DeleteVendor(id string) error {
+	result, err := s.db.Exec("DELETE FROM vendors WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("vendor not found: %s", id)
+	}
+
+	return nil
+}
+
+// DHCP Option operations
+
+// ListDhcpOptions returns all DHCP options
+func (s *Store) ListDhcpOptions() ([]models.DhcpOption, error) {
+	rows, err := s.db.Query(`
+		SELECT id, option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at
+		FROM dhcp_options
+		ORDER BY option_number, vendor_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var options []models.DhcpOption
+	for rows.Next() {
+		var o models.DhcpOption
+		var enabled int
+		if err := rows.Scan(&o.ID, &o.OptionNumber, &o.Name, &o.Value, &o.Type, &o.VendorID, &o.Description, &enabled, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		o.Enabled = enabled == 1
+		options = append(options, o)
+	}
+
+	return options, rows.Err()
+}
+
+// GetDhcpOption returns a DHCP option by ID
+func (s *Store) GetDhcpOption(id string) (*models.DhcpOption, error) {
+	var o models.DhcpOption
+	var enabled int
+	err := s.db.QueryRow(`
+		SELECT id, option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at
+		FROM dhcp_options WHERE id = ?
+	`, id).Scan(&o.ID, &o.OptionNumber, &o.Name, &o.Value, &o.Type, &o.VendorID, &o.Description, &enabled, &o.CreatedAt, &o.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	o.Enabled = enabled == 1
+	return &o, nil
+}
+
+// CreateDhcpOption creates a new DHCP option
+func (s *Store) CreateDhcpOption(o *models.DhcpOption) error {
+	now := time.Now()
+	o.CreatedAt = now
+	o.UpdatedAt = now
+
+	enabled := 0
+	if o.Enabled {
+		enabled = 1
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO dhcp_options (id, option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, o.ID, o.OptionNumber, o.Name, o.Value, o.Type, o.VendorID, o.Description, enabled, o.CreatedAt, o.UpdatedAt)
+
+	return err
+}
+
+// UpdateDhcpOption updates an existing DHCP option
+func (s *Store) UpdateDhcpOption(o *models.DhcpOption) error {
+	o.UpdatedAt = time.Now()
+
+	enabled := 0
+	if o.Enabled {
+		enabled = 1
+	}
+
+	result, err := s.db.Exec(`
+		UPDATE dhcp_options SET option_number = ?, name = ?, value = ?, type = ?, vendor_id = ?, description = ?, enabled = ?, updated_at = ?
+		WHERE id = ?
+	`, o.OptionNumber, o.Name, o.Value, o.Type, o.VendorID, o.Description, enabled, o.UpdatedAt, o.ID)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("dhcp option not found: %s", o.ID)
+	}
+
+	return nil
+}
+
+// DeleteDhcpOption removes a DHCP option
+func (s *Store) DeleteDhcpOption(id string) error {
+	result, err := s.db.Exec("DELETE FROM dhcp_options WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("dhcp option not found: %s", id)
+	}
+
+	return nil
+}
+
+// Template operations
+
+// ListTemplates returns all templates with device counts
+func (s *Store) ListTemplates() ([]models.Template, error) {
+	rows, err := s.db.Query(`
+		SELECT t.id, t.name, t.description, t.vendor_id, t.content, t.created_at, t.updated_at,
+		       COALESCE(COUNT(d.mac), 0) as device_count
+		FROM templates t
+		LEFT JOIN devices d ON d.config_template = t.id
+		GROUP BY t.id
+		ORDER BY t.name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var templates []models.Template
+	for rows.Next() {
+		var t models.Template
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.VendorID, &t.Content, &t.CreatedAt, &t.UpdatedAt, &t.DeviceCount); err != nil {
+			return nil, err
+		}
+		templates = append(templates, t)
+	}
+
+	return templates, rows.Err()
+}
+
+// GetTemplate returns a template by ID
+func (s *Store) GetTemplate(id string) (*models.Template, error) {
+	var t models.Template
+	err := s.db.QueryRow(`
+		SELECT t.id, t.name, t.description, t.vendor_id, t.content, t.created_at, t.updated_at,
+		       COALESCE(COUNT(d.mac), 0) as device_count
+		FROM templates t
+		LEFT JOIN devices d ON d.config_template = t.id
+		WHERE t.id = ?
+		GROUP BY t.id
+	`, id).Scan(&t.ID, &t.Name, &t.Description, &t.VendorID, &t.Content, &t.CreatedAt, &t.UpdatedAt, &t.DeviceCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// CreateTemplate creates a new template
+func (s *Store) CreateTemplate(t *models.Template) error {
+	now := time.Now()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+
+	_, err := s.db.Exec(`
+		INSERT INTO templates (id, name, description, vendor_id, content, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, t.ID, t.Name, t.Description, t.VendorID, t.Content, t.CreatedAt, t.UpdatedAt)
+
+	return err
+}
+
+// UpdateTemplate updates an existing template
+func (s *Store) UpdateTemplate(t *models.Template) error {
+	t.UpdatedAt = time.Now()
+
+	result, err := s.db.Exec(`
+		UPDATE templates SET name = ?, description = ?, vendor_id = ?, content = ?, updated_at = ?
+		WHERE id = ?
+	`, t.Name, t.Description, t.VendorID, t.Content, t.UpdatedAt, t.ID)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("template not found: %s", t.ID)
+	}
+
+	return nil
+}
+
+// DeleteTemplate removes a template
+func (s *Store) DeleteTemplate(id string) error {
+	result, err := s.db.Exec("DELETE FROM templates WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("template not found: %s", id)
+	}
+
+	return nil
 }

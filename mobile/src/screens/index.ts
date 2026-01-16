@@ -1,5 +1,6 @@
 export { DevicesScreen } from './DevicesScreen';
-export { AddDeviceScreen } from './AddDeviceScreen';
-export { EditDeviceScreen } from './EditDeviceScreen';
+export { DeviceFormScreen } from './DeviceFormScreen';
+export { DhcpOptionsScreen } from './DhcpOptionsScreen';
 export { SettingsScreen } from './SettingsScreen';
 export { ScannerScreen } from './ScannerScreen';
+export { VendorsScreen } from './VendorsScreen';

@@ -7,6 +7,7 @@ type Device struct {
 	MAC            string     `json:"mac"`
 	IP             string     `json:"ip"`
 	Hostname       string     `json:"hostname"`
+	Vendor         string     `json:"vendor,omitempty"`
 	SerialNumber   string     `json:"serial_number,omitempty"`
 	ConfigTemplate string     `json:"config_template"`
 	SSHUser        string     `json:"ssh_user,omitempty"`
@@ -51,6 +52,43 @@ type Lease struct {
 	IP         string
 	Hostname   string
 	ClientID   string
+}
+
+// Vendor represents a network device vendor configuration
+type Vendor struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	BackupCommand string    `json:"backup_command"`
+	SSHPort       int       `json:"ssh_port"`
+	DeviceCount   int       `json:"device_count,omitempty"` // Computed field
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// DhcpOption represents a DHCP option configuration
+type DhcpOption struct {
+	ID           string    `json:"id"`
+	OptionNumber int       `json:"option_number"`
+	Name         string    `json:"name"`
+	Value        string    `json:"value"`
+	Type         string    `json:"type"` // string, ip, hex, number
+	VendorID     string    `json:"vendor_id,omitempty"`
+	Description  string    `json:"description,omitempty"`
+	Enabled      bool      `json:"enabled"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// Template represents a configuration template
+type Template struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	VendorID    string    `json:"vendor_id,omitempty"`
+	Content     string    `json:"content"`
+	DeviceCount int       `json:"device_count,omitempty"` // Computed field
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // DefaultSettings returns settings with sensible defaults

@@ -1,61 +1,88 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import type { Device } from '../core';
+import { useForm, validateDeviceForm, DEVICE_VENDORS } from '../core';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
 import { FormField } from './FormField';
+import { SelectField } from './SelectField';
 
 interface Props {
   isOpen: boolean;
   device?: Device | null;
-  onSubmit: (device: Partial<Device>) => void;
+  onSubmit: (device: Partial<Device>) => Promise<void>;
   onClose: () => void;
 }
 
-export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
-  const [formData, setFormData] = useState({
-    mac: '',
-    ip: '',
-    hostname: '',
-    serial_number: '',
-    config_template: '',
-    ssh_user: '',
-    ssh_pass: '',
-  });
+type DeviceFormData = {
+  mac: string;
+  ip: string;
+  hostname: string;
+  vendor: string;
+  serial_number: string;
+  config_template: string;
+  ssh_user: string;
+  ssh_pass: string;
+};
 
+const emptyFormData: DeviceFormData = {
+  mac: '',
+  ip: '',
+  hostname: '',
+  vendor: '',
+  serial_number: '',
+  config_template: '',
+  ssh_user: '',
+  ssh_pass: '',
+};
+
+export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
   const isEditing = !!device;
 
-  useEffect(() => {
-    if (device) {
-      setFormData({
-        mac: device.mac,
-        ip: device.ip,
-        hostname: device.hostname,
-        serial_number: device.serial_number || '',
-        config_template: device.config_template || '',
-        ssh_user: device.ssh_user || '',
-        ssh_pass: device.ssh_pass || '',
-      });
-    } else {
-      setFormData({
-        mac: '',
-        ip: '',
-        hostname: '',
-        serial_number: '',
-        config_template: '',
-        ssh_user: '',
-        ssh_pass: '',
-      });
-    }
-  }, [device, isOpen]);
+  const {
+    formData,
+    errors,
+    saving,
+    handleChange,
+    resetForm,
+    handleSubmit,
+  } = useForm<DeviceFormData>({
+    initialData: emptyFormData,
+    onSubmit: async (data) => {
+      await onSubmit(data);
+      onClose();
+    },
+    validate: validateDeviceForm,
+  });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  // Reset form when dialog opens/closes or device changes
+  useEffect(() => {
+    if (isOpen) {
+      if (device) {
+        resetForm({
+          mac: device.mac,
+          ip: device.ip,
+          hostname: device.hostname,
+          vendor: device.vendor || '',
+          serial_number: device.serial_number || '',
+          config_template: device.config_template || '',
+          ssh_user: device.ssh_user || '',
+          ssh_pass: device.ssh_pass || '',
+        });
+      } else {
+        resetForm(emptyFormData);
+      }
+    }
+  }, [device, isOpen, resetForm]);
+
+  const onFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSubmit();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
+  // Adapter for web input onChange events
+  const onInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    handleChange(name as keyof DeviceFormData, value);
   };
 
   return (
@@ -65,45 +92,55 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
       title={isEditing ? 'Edit Device' : 'Add Device'}
       variant="wide"
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={onFormSubmit}>
         <div className="form-row">
           <FormField
             label="MAC Address *"
             name="mac"
             type="text"
             value={formData.mac}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="aa:bb:cc:dd:ee:ff"
             required
             disabled={isEditing}
+            error={errors.mac}
           />
           <FormField
             label="IP Address *"
             name="ip"
             type="text"
             value={formData.ip}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="192.168.1.100"
             required
+            error={errors.ip}
           />
           <FormField
             label="Hostname *"
             name="hostname"
             type="text"
             value={formData.hostname}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="switch-01"
             required
+            error={errors.hostname}
           />
         </div>
 
         <div className="form-row">
+          <SelectField
+            label="Vendor"
+            name="vendor"
+            value={formData.vendor}
+            onChange={onInputChange}
+            options={DEVICE_VENDORS}
+          />
           <FormField
             label="Serial Number"
             name="serial_number"
             type="text"
             value={formData.serial_number}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="SN123456 (optional)"
           />
           <FormField
@@ -111,7 +148,7 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
             name="config_template"
             type="text"
             value={formData.config_template}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="switch.template (optional)"
           />
         </div>
@@ -122,7 +159,7 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
             name="ssh_user"
             type="text"
             value={formData.ssh_user}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="Leave empty for default"
           />
           <FormField
@@ -130,7 +167,7 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
             name="ssh_pass"
             type="password"
             value={formData.ssh_pass}
-            onChange={handleChange}
+            onChange={onInputChange}
             placeholder="Leave empty for default"
           />
         </div>
@@ -139,8 +176,8 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">
-            {isEditing ? 'Update Device' : 'Add Device'}
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Saving...' : isEditing ? 'Update Device' : 'Add Device'}
           </Button>
         </div>
       </form>

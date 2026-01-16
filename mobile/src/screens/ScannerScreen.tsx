@@ -4,10 +4,23 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList, ScanField } from '../navigation/types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Scanner'>;
 type ScannerRouteProp = RouteProp<RootStackParamList, 'Scanner'>;
+
+const FIELD_LABELS: Record<ScanField, { title: string; prompt: string; button: string }> = {
+  serial_number: {
+    title: 'Serial Number Scanned',
+    prompt: 'Use "%s" as the serial number?',
+    button: 'Use Serial',
+  },
+  mac: {
+    title: 'MAC Address Scanned',
+    prompt: 'Use "%s" as the MAC address?',
+    button: 'Use MAC',
+  },
+};
 
 export function ScannerScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -16,7 +29,8 @@ export function ScannerScreen() {
   const [scanned, setScanned] = useState(false);
   const lastScannedRef = useRef<string | null>(null);
 
-  const { returnTo, mac } = route.params;
+  const { mac, field } = route.params;
+  const labels = FIELD_LABELS[field];
 
   const handleBarCodeScanned = (result: BarcodeScanningResult) => {
     if (scanned) return;
@@ -33,8 +47,8 @@ export function ScannerScreen() {
     const cleanedData = data.trim();
 
     Alert.alert(
-      'Serial Number Scanned',
-      `Use "${cleanedData}" as the serial number?`,
+      labels.title,
+      labels.prompt.replace('%s', cleanedData),
       [
         {
           text: 'Cancel',
@@ -45,19 +59,18 @@ export function ScannerScreen() {
           },
         },
         {
-          text: 'Use Serial',
+          text: labels.button,
           onPress: () => {
-            // Navigate back with the scanned serial using replace + navigate pattern
-            // Pop the scanner screen first, then navigate to target with params
+            // Navigate back with the scanned value
             navigation.goBack();
 
             // Use setTimeout to ensure goBack completes before navigate
             setTimeout(() => {
-              if (returnTo === 'EditDevice' && mac) {
-                navigation.navigate('EditDevice', { mac, scannedSerial: cleanedData });
-              } else {
-                navigation.navigate('AddDevice', { scannedSerial: cleanedData });
-              }
+              navigation.navigate('DeviceForm', {
+                mac,
+                scannedValue: cleanedData,
+                scannedField: field,
+              });
             }, 50);
           },
         },
@@ -96,6 +109,10 @@ export function ScannerScreen() {
     );
   }
 
+  const instructionText = field === 'mac'
+    ? 'Point camera at MAC address barcode or QR code'
+    : 'Point camera at serial number barcode or QR code';
+
   return (
     <View style={styles.container}>
       <CameraView
@@ -124,9 +141,7 @@ export function ScannerScreen() {
       </View>
 
       <View style={styles.instructionContainer}>
-        <Text style={styles.instruction}>
-          Point camera at device serial number barcode or QR code
-        </Text>
+        <Text style={styles.instruction}>{instructionText}</Text>
       </View>
 
       <TouchableOpacity

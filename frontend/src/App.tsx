@@ -3,11 +3,39 @@ import { useDevices, useWebTheme } from './core';
 import { DeviceList } from './components/DeviceList';
 import { DeviceForm } from './components/DeviceForm';
 import { SettingsDialog } from './components/SettingsDialog';
-import { Button, Message, ThemeSelector, Icon, PlusIcon, RefreshIcon } from './components';
+import {
+  Button,
+  DhcpOptions,
+  DropdownSelect,
+  Message,
+  TemplateBuilder,
+  ThemeSelector,
+  Icon,
+  PlusIcon,
+  RefreshIcon,
+  VendorManagement,
+} from './components';
+import type { DropdownOption } from './components';
 import type { Device } from './core';
 import logo from './assets/image.png';
 
+const PAGES: DropdownOption[] = [
+  { id: 'devices', label: 'Devices', icon: 'devices', description: 'Manage network devices' },
+  { id: 'templates', label: 'Templates', icon: 'description', description: 'Build config templates' },
+  { id: 'vendors', label: 'Vendors', icon: 'business', description: 'Configure vendor settings' },
+  { id: 'dhcp', label: 'DHCP Options', icon: 'lan', description: 'Manage DHCP options' },
+];
+
 function App() {
+  const [activePage, setActivePage] = useState(() => {
+    return localStorage.getItem('ztp_active_page') || 'devices';
+  });
+
+  // Persist active page to localStorage
+  const handlePageChange = (page: string) => {
+    setActivePage(page);
+    localStorage.setItem('ztp_active_page', page);
+  };
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [showDeviceForm, setShowDeviceForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -24,19 +52,11 @@ function App() {
     triggerBackup,
   } = useDevices();
 
-  const handleCreateDevice = async (device: Partial<Device>) => {
-    const success = await createDevice(device);
-    if (success) {
-      setShowDeviceForm(false);
-    }
-  };
-
-  const handleUpdateDevice = async (device: Partial<Device>) => {
-    if (!editingDevice) return;
-    const success = await updateDevice(editingDevice.mac, device);
-    if (success) {
-      setEditingDevice(null);
-      setShowDeviceForm(false);
+  const handleSubmitDevice = async (device: Partial<Device>) => {
+    if (editingDevice) {
+      await updateDevice(editingDevice.mac, device);
+    } else {
+      await createDevice(device);
     }
   };
 
@@ -56,37 +76,61 @@ function App() {
         <div className="header-content">
           <img src={logo} alt="Logo" className="header-logo" />
           <h1>ZTP Manager</h1>
+          <DropdownSelect
+            options={PAGES}
+            value={activePage}
+            onChange={handlePageChange}
+            placeholder="Select page..."
+            icon="menu"
+            className="header-nav"
+          />
         </div>
       </header>
 
       <div className="container">
         {message && <Message type={message.type} text={message.text} />}
 
-        <div className="actions-bar">
-          <Button
-            onClick={() => {
-              setEditingDevice(null);
-              setShowDeviceForm(true);
-            }}
-          >
-            <PlusIcon size={16} />
-            Add Device
-          </Button>
-          <Button variant="secondary" onClick={refresh}>
-            <RefreshIcon size={16} />
-            Refresh
-          </Button>
-        </div>
+        {activePage === 'devices' && (
+          <>
+            <div className="actions-bar">
+              <Button
+                onClick={() => {
+                  setEditingDevice(null);
+                  setShowDeviceForm(true);
+                }}
+              >
+                <PlusIcon size={16} />
+                Add Device
+              </Button>
+              <Button variant="secondary" onClick={refresh}>
+                <RefreshIcon size={16} />
+                Refresh
+              </Button>
+            </div>
 
-        {loading ? (
-          <div className="card">Loading devices...</div>
-        ) : (
-          <DeviceList
-            devices={devices}
-            onEdit={handleEdit}
-            onDelete={deleteDevice}
-            onBackup={triggerBackup}
-          />
+            {loading ? (
+              <div className="card">Loading devices...</div>
+            ) : (
+              <DeviceList
+                devices={devices}
+                onEdit={handleEdit}
+                onDelete={deleteDevice}
+                onBackup={triggerBackup}
+              />
+            )}
+          </>
+        )}
+
+        {activePage === 'templates' && (
+          <TemplateBuilder />
+        )}
+
+        {activePage === 'vendors' && (
+          <VendorManagement devices={devices} />
+        )}
+
+        {activePage === 'dhcp' && (
+          <DhcpOptions />
         )}
       </div>
 
@@ -109,7 +153,7 @@ function App() {
       <DeviceForm
         isOpen={showDeviceForm}
         device={editingDevice}
-        onSubmit={editingDevice ? handleUpdateDevice : handleCreateDevice}
+        onSubmit={handleSubmitDevice}
         onClose={handleCloseForm}
       />
 

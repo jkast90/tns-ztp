@@ -53,7 +53,13 @@ func main() {
 		handlers.NewDeviceHandler(store, configMgr.GenerateConfig).RegisterRoutes(api)
 		handlers.NewSettingsHandler(store, configMgr.GenerateConfig).RegisterRoutes(api)
 		handlers.NewBackupHandler(store, backupSvc.TriggerBackup).RegisterRoutes(api)
+		handlers.NewVendorHandler(store).RegisterRoutes(api)
+		handlers.NewDhcpOptionHandler(store, configMgr.GenerateConfig).RegisterRoutes(api)
+		handlers.NewTemplateHandler(store, configMgr.GenerateConfig).RegisterRoutes(api)
 	}
+
+	// HTTP config server - serves generated device configs
+	router.Static("/configs", cfg.TFTPDir)
 
 	// Serve static frontend files
 	router.Static("/assets", "/app/frontend/assets")

@@ -176,10 +176,17 @@ func (m *ConfigManager) generateDeviceConfigs(devices []models.Device, settings 
 func (m *ConfigManager) generateSingleDeviceConfig(device *models.Device, settings *models.Settings) error {
 	// Determine which template to use
 	templateContent := defaultDeviceTemplate
+
+	// First try to load from database
 	if device.ConfigTemplate != "" {
-		customPath := filepath.Join(m.templatesDir, device.ConfigTemplate)
-		if content, err := os.ReadFile(customPath); err == nil {
-			templateContent = string(content)
+		if dbTemplate, err := m.store.GetTemplate(device.ConfigTemplate); err == nil && dbTemplate != nil {
+			templateContent = dbTemplate.Content
+		} else {
+			// Fallback to file-based template for backwards compatibility
+			customPath := filepath.Join(m.templatesDir, device.ConfigTemplate)
+			if content, err := os.ReadFile(customPath); err == nil {
+				templateContent = string(content)
+			}
 		}
 	}
 
