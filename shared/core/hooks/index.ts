@@ -63,3 +63,10 @@ export {
   type UseAsyncModalOptions,
   type UseAsyncModalReturn,
 } from './useAsyncModal';
+export {
+  useLocalSettings,
+  getLocalApiUrl,
+  setLocalApiUrl,
+  type LocalSettings,
+  type UseLocalSettingsReturn,
+} from './useLocalSettings';

@@ -58,6 +58,9 @@ export {
   useListFiltering,
   useAsyncModal,
   useSimpleModal,
+  useLocalSettings,
+  getLocalApiUrl,
+  setLocalApiUrl,
   THEME_OPTIONS,
   type UseDevicesOptions,
   type UseDevicesReturn,
@@ -93,6 +96,8 @@ export {
   type GroupedItems,
   type UseAsyncModalOptions,
   type UseAsyncModalReturn,
+  type LocalSettings,
+  type UseLocalSettingsReturn,
 } from './hooks';
 
 // Utils

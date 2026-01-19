@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Template, TemplateFormData } from '../core';
 import { useTemplates, useVendors, useDevices, getVendorName, EMPTY_TEMPLATE_FORM, MONOSPACE_FONT } from '../core';
@@ -20,6 +19,7 @@ import {
   EmptyState,
   FormModal,
   FormInput,
+  FormSelect,
   CardActions,
   LoadingState,
   ErrorState,
@@ -212,8 +212,8 @@ export function TemplatesScreen() {
     });
   };
 
-  const renderTemplate = ({ item }: { item: Template }) => (
-    <Card style={styles.templateCard}>
+  const renderTemplateCard = (item: Template) => (
+    <Card key={item.id} style={styles.templateCard}>
       <View style={styles.templateHeader}>
         <View style={styles.templateInfo}>
           <Text style={[styles.templateName, { color: colors.textPrimary }]}>{item.name}</Text>
@@ -262,7 +262,7 @@ export function TemplatesScreen() {
   const renderSection = (title: string, data: Template[]) => (
     <View key={title}>
       <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
-      {data.map((item) => renderTemplate({ item }))}
+      {data.map(renderTemplateCard)}
     </View>
   );
 
@@ -288,19 +288,13 @@ export function TemplatesScreen() {
 
       {/* Filter */}
       <View style={styles.filterContainer}>
-        <Text style={[styles.filterLabel, { color: colors.textMuted }]}>Filter by Vendor:</Text>
-        <View style={[styles.pickerWrapper, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-          <Picker
-            selectedValue={filterVendor}
-            onValueChange={setFilterVendor}
-            style={[styles.picker, { color: colors.textPrimary }]}
-            dropdownIconColor={colors.accentBlue}
-          >
-            {vendorSelectOptions.map((opt) => (
-              <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-            ))}
-          </Picker>
-        </View>
+        <FormSelect
+          label="Filter by Vendor"
+          value={filterVendor}
+          options={vendorSelectOptions}
+          onChange={setFilterVendor}
+          placeholder="All Vendors"
+        />
       </View>
 
       <ScrollView style={styles.templatesList}>
@@ -337,21 +331,16 @@ export function TemplatesScreen() {
           editable={!editingTemplate}
         />
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>Vendor (optional)</Text>
-          <View style={[styles.pickerWrapper, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-            <Picker
-              selectedValue={formData.vendor_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
-              style={[styles.formPicker, { color: colors.textPrimary }]}
-            >
-              <Picker.Item label="All Vendors (Global)" value="" />
-              {vendors.map((v) => (
-                <Picker.Item key={v.id} label={v.name} value={v.id} />
-              ))}
-            </Picker>
-          </View>
-        </View>
+        <FormSelect
+          label="Vendor (optional)"
+          value={formData.vendor_id}
+          options={[
+            { value: '', label: 'All Vendors (Global)' },
+            ...vendors.map((v) => ({ value: v.id, label: v.name })),
+          ]}
+          onChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
+          placeholder="All Vendors (Global)"
+        />
 
         <FormInput
           label="Description"
@@ -360,8 +349,8 @@ export function TemplatesScreen() {
           placeholder="Optional description"
         />
 
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>Template Content *</Text>
+        <View style={styles.contentInputGroup}>
+          <Text style={[styles.contentInputLabel, { color: colors.textMuted }]}>Template Content *</Text>
           <TextInput
             style={[styles.contentInput, { backgroundColor: colors.bgSecondary, borderColor: colors.border, color: colors.textPrimary }]}
             value={formData.content}
@@ -392,19 +381,13 @@ export function TemplatesScreen() {
           <ScrollView style={styles.previewContent}>
             {/* Device selector */}
             <View style={styles.previewSection}>
-              <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Select Device</Text>
-              <View style={[styles.pickerWrapper, { backgroundColor: colors.bgSecondary, borderColor: colors.border }]}>
-                <Picker
-                  selectedValue={previewDeviceMAC}
-                  onValueChange={setPreviewDeviceMAC}
-                  style={[styles.picker, { color: colors.textPrimary }]}
-                  dropdownIconColor={colors.accentBlue}
-                >
-                  {deviceSelectOptions.map((opt) => (
-                    <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-                  ))}
-                </Picker>
-              </View>
+              <FormSelect
+                label="Select Device"
+                value={previewDeviceMAC}
+                options={deviceSelectOptions}
+                onChange={setPreviewDeviceMAC}
+                placeholder="Select a device..."
+              />
               <Button
                 title={previewLoading ? 'Generating...' : 'Generate'}
                 onPress={handleGeneratePreview}
@@ -479,23 +462,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 8,
-    gap: 12,
-  },
-  filterLabel: {
-    fontSize: 13,
-  },
-  pickerWrapper: {
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-    flex: 1,
-  },
-  picker: {
-    height: 40,
   },
   templatesList: {
     flex: 1,
@@ -560,10 +528,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: MONOSPACE_FONT,
   },
-  formGroup: {
+  contentInputGroup: {
     marginBottom: 16,
   },
-  label: {
+  contentInputLabel: {
     fontSize: 13,
     marginBottom: 8,
   },
@@ -574,9 +542,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 200,
     fontFamily: MONOSPACE_FONT,
-  },
-  formPicker: {
-    height: 44,
   },
   cardActionsRow: {
     flexDirection: 'row',
@@ -605,10 +570,6 @@ const styles = StyleSheet.create({
   previewSection: {
     gap: 12,
     marginBottom: 16,
-  },
-  previewLabel: {
-    fontSize: 13,
-    fontWeight: '500',
   },
   previewDeviceCard: {
     marginBottom: 16,

@@ -1603,6 +1603,13 @@ td code {
   border-bottom: 1px solid var(--color-border);
 }
 
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
 /* Loading animation */
 @keyframes shimmer {
   0% {

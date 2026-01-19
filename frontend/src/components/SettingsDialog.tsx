@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSettings } from '@core';
+import { useSettings, useLocalSettings, configureServices } from '@core';
 import type { Settings } from '@core';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
@@ -15,13 +15,16 @@ interface Props {
 
 export function SettingsDialog({ isOpen, onClose }: Props) {
   const { settings, loading, saving, message, load, save } = useSettings();
+  const { settings: localSettings, updateSettings: updateLocalSettings } = useLocalSettings();
   const [formData, setFormData] = useState<Settings | null>(null);
+  const [localFormData, setLocalFormData] = useState({ apiUrl: '' });
 
   useEffect(() => {
     if (isOpen) {
       load();
+      setLocalFormData({ apiUrl: localSettings.apiUrl });
     }
-  }, [isOpen, load]);
+  }, [isOpen, load, localSettings.apiUrl]);
 
   useEffect(() => {
     if (settings) {
@@ -38,9 +41,22 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
     }));
   };
 
+  const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setLocalFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData) return;
+
+    // Save local settings first (API URL change takes effect on next request)
+    if (localFormData.apiUrl !== localSettings.apiUrl) {
+      updateLocalSettings({ apiUrl: localFormData.apiUrl });
+      // Update the service configuration to use the new API URL
+      configureServices({ baseUrl: localFormData.apiUrl });
+    }
+
     const success = await save(formData);
     if (success) {
       setTimeout(() => onClose(), 1500);
@@ -57,6 +73,26 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
         <p>Failed to load settings</p>
       ) : (
         <form onSubmit={handleSubmit}>
+          <div className="settings-section">
+            <h3>
+              <Icon name="cloud" size={18} />
+              Connection
+            </h3>
+            <div className="form-row">
+              <FormField
+                label="API URL"
+                name="apiUrl"
+                type="text"
+                value={localFormData.apiUrl}
+                onChange={handleLocalChange}
+                placeholder="/api or http://server:8080/api"
+              />
+            </div>
+            <p className="settings-hint">
+              Base URL for API requests. Use "/api" for same-origin or full URL for remote server.
+            </p>
+          </div>
+
           <div className="settings-section">
             <h3>
               <Icon name="terminal" size={18} />
