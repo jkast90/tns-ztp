@@ -4,12 +4,15 @@ React Native mobile app for managing ZTP Server devices with barcode scanning su
 
 ## Features
 
-- View and manage all configured devices
-- Add new devices with barcode/QR code scanner
-- Edit device settings (IP, hostname, credentials)
-- Configure global settings (SSH, DHCP, OpenGear)
-- Pull-to-refresh device list
-- Dark theme matching web UI
+- **Dashboard** - Overview with device metrics, status breakdown, and recent activity
+- **Device Management** - View, add, edit, delete devices with barcode/QR scanner
+- **Templates** - Create and manage configuration templates with live preview
+- **Templatizer** - Convert raw device configs into reusable templates
+- **Vendors** - Manage vendor definitions with SSH defaults
+- **DHCP Options** - Configure DHCP option codes
+- **Settings** - Global SSH, DHCP, and OpenGear settings
+- **Theming** - Dark, light, and plain themes
+- Pull-to-refresh throughout
 
 ## Quick Start with Expo Go
 
@@ -117,32 +120,57 @@ mobile/
 ├── App.tsx                 # Root component with providers
 ├── src/
 │   ├── config.ts           # API base URL configuration
-│   ├── ServiceProvider.tsx # Services context provider
-│   ├── core/               # Symlink to shared/core
+│   ├── core/               # Shared core + mobile-specific overrides
+│   │   ├── index.ts        # Re-exports from shared/core
+│   │   └── typography.ts   # Mobile-specific font constants
+│   ├── context/            # React contexts (theme, services)
 │   ├── navigation/
 │   │   ├── AppNavigator.tsx
 │   │   └── types.ts
 │   ├── screens/
-│   │   ├── DevicesScreen.tsx
-│   │   ├── AddDeviceScreen.tsx
-│   │   ├── EditDeviceScreen.tsx
-│   │   ├── SettingsScreen.tsx
-│   │   └── ScannerScreen.tsx
-│   └── components/
-│       ├── FormInput.tsx
-│       ├── StatusBadge.tsx
-│       └── IconButton.tsx
+│   │   ├── DashboardScreen.tsx    # Overview with metrics & activity
+│   │   ├── DevicesHubScreen.tsx   # Device management hub
+│   │   ├── DeviceFormScreen.tsx   # Add/edit device form
+│   │   ├── TemplatesScreen.tsx    # Template management with preview
+│   │   ├── TemplatizerScreen.tsx  # Config → template converter
+│   │   ├── VendorsScreen.tsx      # Vendor management
+│   │   ├── DhcpOptionsScreen.tsx  # DHCP option management
+│   │   ├── SettingsScreen.tsx     # Global settings
+│   │   └── ScannerScreen.tsx      # Barcode/QR scanner
+│   ├── components/
+│   │   ├── Button.tsx             # Themed button
+│   │   ├── Card.tsx               # Card container
+│   │   ├── CardActions.tsx        # Edit/delete action buttons
+│   │   ├── CodePreview.tsx        # Monospace scrollable code display
+│   │   ├── DeviceCard.tsx         # Device list item
+│   │   ├── EmptyState.tsx         # Empty list placeholder
+│   │   ├── ErrorState.tsx         # Error display
+│   │   ├── FormInput.tsx          # Themed text input
+│   │   ├── FormModal.tsx          # Modal form wrapper
+│   │   ├── FormSelect.tsx         # Picker/dropdown
+│   │   ├── InfoRow.tsx            # Label + value row
+│   │   ├── LoadingState.tsx       # Loading spinner
+│   │   ├── MetricCard.tsx         # Dashboard metric card
+│   │   ├── Modal.tsx              # Base modal component
+│   │   ├── ModalHeader.tsx        # Modal header with close button
+│   │   ├── StatusBadge.tsx        # Device status indicator
+│   │   ├── StepIndicator.tsx      # Multi-step wizard progress
+│   │   ├── ThemedSwitch.tsx       # Themed toggle switch
+│   │   └── ValidatedInput.tsx     # Input with validation
+│   └── utils/
+│       └── alerts.ts              # Alert helpers (showError, confirmDelete)
 ```
 
 ## Shared Code
 
 This app shares code with the web frontend via `shared/core/`:
-- **Types** - Device, Settings, etc.
-- **Services** - API calls (DeviceService, SettingsService)
-- **Hooks** - useDevices, useSettings, useBackups
-- **Utils** - Validation and formatting
+- **Types** - Device, Settings, Template, Vendor, etc.
+- **Services** - API calls (DeviceService, SettingsService, TemplateService, etc.)
+- **Hooks** - useDevices, useSettings, useTemplates, useVendors, useDhcpOptions, etc.
+- **Utils** - Validation, formatting, status colors, variable type styling
+- **Theme** - Color schemes (dark, light, plain)
 
-The `src/core` directory is a symlink to `../../shared/core`.
+The mobile app imports from `./core` which re-exports shared code and adds mobile-specific overrides (e.g., platform-specific monospace fonts).
 
 ## Troubleshooting
 
