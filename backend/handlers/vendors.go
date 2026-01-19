@@ -21,6 +21,7 @@ func NewVendorHandler(store *db.Store) *VendorHandler {
 // RegisterRoutes registers all vendor routes
 func (h *VendorHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/vendors", h.List)
+	r.GET("/vendors/defaults", h.ListDefaults)
 	r.GET("/vendors/:id", h.Get)
 	r.POST("/vendors", h.Create)
 	r.PUT("/vendors/:id", h.Update)
@@ -34,12 +35,13 @@ func (h *VendorHandler) List(c *gin.Context) {
 		internalError(c, err)
 		return
 	}
+	okList(c, vendors)
+}
 
-	if vendors == nil {
-		vendors = []models.Vendor{}
-	}
-
-	ok(c, vendors)
+// ListDefaults returns the default vendor configurations
+func (h *VendorHandler) ListDefaults(c *gin.Context) {
+	defaults := db.GetDefaultVendors()
+	okList(c, defaults)
 }
 
 // Get returns a single vendor by ID

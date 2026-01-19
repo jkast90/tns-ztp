@@ -25,6 +25,8 @@ services:
       - ztp-backups:/backups
       - ./configs/templates:/configs/templates:ro
       - go-cache:/go/pkg/mod
+      # Mount Docker socket for spawning test containers
+      - /var/run/docker.sock:/var/run/docker.sock
     cap_add:
       - NET_ADMIN
     environment:
@@ -36,6 +38,9 @@ services:
       - LEASE_PATH=/var/lib/misc/dnsmasq.leases
       - LISTEN_ADDR=:8080
       - DEV_MODE=true
+      # Docker configuration for spawning test containers
+      - DOCKER_NETWORK=ztp-server_ztp-net
+      - TEST_CLIENT_IMAGE=ztp-server-test-client
     restart: unless-stopped
 
   # Vite dev server with hot reload

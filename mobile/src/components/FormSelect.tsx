@@ -9,6 +9,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAppTheme } from '../context';
 
 interface Option {
   value: string;
@@ -32,6 +33,7 @@ export function FormSelect({
   placeholder = 'Select...',
   error,
 }: Props) {
+  const { colors } = useAppTheme();
   const [isOpen, setIsOpen] = useState(false);
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -44,17 +46,28 @@ export function FormSelect({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
       <Pressable
-        style={[styles.select, error && styles.selectError]}
+        style={[
+          styles.select,
+          {
+            backgroundColor: colors.bgPrimary,
+            borderColor: error ? colors.error : colors.border,
+          },
+        ]}
         onPress={() => setIsOpen(true)}
       >
-        <Text style={[styles.selectText, !selectedOption && styles.placeholder]}>
+        <Text
+          style={[
+            styles.selectText,
+            { color: selectedOption ? colors.textPrimary : colors.textMuted },
+          ]}
+        >
           {displayText}
         </Text>
-        <Ionicons name="chevron-down" size={20} color="#666" />
+        <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
       </Pressable>
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
 
       <Modal
         visible={isOpen}
@@ -64,11 +77,11 @@ export function FormSelect({
       >
         <Pressable style={styles.overlay} onPress={() => setIsOpen(false)}>
           <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modal}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{label}</Text>
+            <View style={[styles.modal, { backgroundColor: colors.bgCard }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{label}</Text>
                 <Pressable onPress={() => setIsOpen(false)}>
-                  <Ionicons name="close" size={24} color="#fff" />
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </Pressable>
               </View>
               <FlatList
@@ -78,20 +91,22 @@ export function FormSelect({
                   <Pressable
                     style={[
                       styles.option,
-                      item.value === value && styles.optionSelected,
+                      { borderBottomColor: colors.border },
+                      item.value === value && { backgroundColor: `${colors.accentBlue}15` },
                     ]}
                     onPress={() => handleSelect(item.value)}
                   >
                     <Text
                       style={[
                         styles.optionText,
-                        item.value === value && styles.optionTextSelected,
+                        { color: item.value === value ? colors.accentBlue : colors.textPrimary },
+                        item.value === value && { fontWeight: '500' },
                       ]}
                     >
                       {item.label}
                     </Text>
                     {item.value === value && (
-                      <Ionicons name="checkmark" size={20} color="#7c3aed" />
+                      <Ionicons name="checkmark" size={20} color={colors.accentBlue} />
                     )}
                   </Pressable>
                 )}
@@ -109,16 +124,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#aaa',
     fontSize: 12,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   select: {
-    backgroundColor: '#0f0f1a',
     borderWidth: 1,
-    borderColor: '#2a2a4e',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -126,18 +138,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  selectError: {
-    borderColor: '#ff5252',
-  },
   selectText: {
-    color: '#fff',
     fontSize: 16,
   },
-  placeholder: {
-    color: '#666',
-  },
   error: {
-    color: '#ff5252',
     fontSize: 12,
     marginTop: 4,
   },
@@ -152,8 +156,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modal: {
-    backgroundColor: '#1a1a2e',
     borderRadius: 12,
+    minHeight: '40%',
     maxHeight: '70%',
     overflow: 'hidden',
   },
@@ -163,10 +167,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a4e',
   },
   modalTitle: {
-    color: '#fff',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -176,17 +178,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a4e',
-  },
-  optionSelected: {
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
   },
   optionText: {
-    color: '#fff',
     fontSize: 16,
-  },
-  optionTextSelected: {
-    color: '#7c3aed',
-    fontWeight: '500',
   },
 });

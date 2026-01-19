@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ViewProps } from 'react-native';
+import { View, Text, ViewProps } from 'react-native';
+import { useAppTheme } from '../context';
 
 interface Props extends ViewProps {
   title?: string;
@@ -7,39 +8,36 @@ interface Props extends ViewProps {
 }
 
 export function Card({ title, subtitle, children, style, ...props }: Props) {
+  const { colors } = useAppTheme();
+
   return (
-    <View style={[styles.card, style]} {...props}>
+    <View
+      style={[
+        {
+          backgroundColor: colors.bgCard,
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        style,
+      ]}
+      {...props}
+    >
       {title && (
-        <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.textPrimary }}>
+            {title}
+          </Text>
+          {subtitle && (
+            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+              {subtitle}
+            </Text>
+          )}
         </View>
       )}
       {children}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#2a2a4e',
-  },
-  header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
-});

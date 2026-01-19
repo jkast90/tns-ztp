@@ -47,6 +47,15 @@ func ok(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, data)
 }
 
+// okList sends a list response, ensuring nil slices become empty arrays
+// Use this for list endpoints to avoid returning null in JSON
+func okList[T any](c *gin.Context, data []T) {
+	if data == nil {
+		data = []T{}
+	}
+	c.JSON(http.StatusOK, data)
+}
+
 func created(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusCreated, data)
 }

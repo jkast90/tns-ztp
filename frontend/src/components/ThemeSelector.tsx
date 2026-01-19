@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Theme } from '../core';
+import type { Theme } from '@core';
 import { Icon } from './Icon';
 import { Drawer } from './Drawer';
 

@@ -1,8 +1,9 @@
-// DHCP Options management hook - handles DHCP option CRUD operations and state
+// DHCP Options management hook - uses generic useCrud for CRUD operations
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { DhcpOption, Message } from '../types';
 import { getServices } from '../services';
+import { useCrud, type UseCrudOptions } from './useCrud';
 
 export interface UseDhcpOptionsOptions {
   autoRefresh?: boolean;
@@ -19,6 +20,7 @@ export interface UseDhcpOptionsReturn {
   createOption: (option: Partial<DhcpOption>) => Promise<boolean>;
   updateOption: (id: string, option: Partial<DhcpOption>) => Promise<boolean>;
   deleteOption: (id: string) => Promise<boolean>;
+  resetToDefaults: () => Promise<boolean>;
   message: Message | null;
   clearMessage: () => void;
 }
@@ -26,91 +28,68 @@ export interface UseDhcpOptionsReturn {
 export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOptionsReturn {
   const { autoRefresh = false, refreshInterval = 30000, vendorFilter } = options;
 
-  const [dhcpOptions, setDhcpOptions] = useState<DhcpOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<Message | null>(null);
+  const services = useMemo(() => getServices(), []);
 
-  const services = getServices();
-
-  const clearMessage = useCallback(() => setMessage(null), []);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await services.dhcpOptions.list();
-      setDhcpOptions(data || []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load DHCP options');
-    } finally {
-      setLoading(false);
-    }
-  }, [services.dhcpOptions]);
-
-  const filteredOptions = useMemo(() => {
+  // Create filter function based on vendorFilter
+  const filterFn = useCallback((items: DhcpOption[]) => {
     if (!vendorFilter || vendorFilter === 'all') {
-      return dhcpOptions;
+      return items;
     }
     if (vendorFilter === 'global') {
-      return dhcpOptions.filter(o => !o.vendor_id);
+      return items.filter(o => !o.vendor_id);
     }
-    return dhcpOptions.filter(o => o.vendor_id === vendorFilter);
-  }, [dhcpOptions, vendorFilter]);
+    return items.filter(o => o.vendor_id === vendorFilter);
+  }, [vendorFilter]);
 
-  const createOption = useCallback(async (option: Partial<DhcpOption>): Promise<boolean> => {
+  const crudOptions: UseCrudOptions<DhcpOption> = useMemo(() => ({
+    autoRefresh,
+    refreshInterval,
+    filter: filterFn,
+  }), [autoRefresh, refreshInterval, filterFn]);
+
+  const {
+    items: dhcpOptions,
+    filteredItems: filteredOptions,
+    loading,
+    error,
+    refresh,
+    create: createOption,
+    update: updateOption,
+    remove: deleteOption,
+    message,
+    clearMessage,
+    setMessage,
+  } = useCrud({
+    service: services.dhcpOptions,
+    labels: { singular: 'DHCP option', plural: 'DHCP options' },
+    options: crudOptions,
+  });
+
+  // Reset to defaults: delete all existing options and create defaults from API
+  const resetToDefaults = useCallback(async (): Promise<boolean> => {
     try {
-      await services.dhcpOptions.create(option);
-      setMessage({ type: 'success', text: 'DHCP option added successfully' });
+      // Get defaults from API
+      const defaults = await services.dhcpOptions.listDefaults();
+
+      // Delete all existing options
+      for (const option of dhcpOptions) {
+        await services.dhcpOptions.remove(option.id);
+      }
+
+      // Create default options
+      for (const option of defaults) {
+        await services.dhcpOptions.create(option);
+      }
+
       await refresh();
+      setMessage({ type: 'success', text: 'DHCP options reset to defaults' });
       return true;
     } catch (err) {
-      setMessage({ type: 'error', text: `Failed to add DHCP option: ${err}` });
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reset DHCP options';
+      setMessage({ type: 'error', text: errorMessage });
       return false;
     }
-  }, [services.dhcpOptions, refresh]);
-
-  const updateOption = useCallback(async (id: string, option: Partial<DhcpOption>): Promise<boolean> => {
-    try {
-      await services.dhcpOptions.update(id, option);
-      setMessage({ type: 'success', text: 'DHCP option updated successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to update DHCP option: ${err}` });
-      return false;
-    }
-  }, [services.dhcpOptions, refresh]);
-
-  const deleteOption = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      await services.dhcpOptions.remove(id);
-      setMessage({ type: 'success', text: 'DHCP option deleted successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to delete DHCP option: ${err}` });
-      return false;
-    }
-  }, [services.dhcpOptions, refresh]);
-
-  // Initial load
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Auto refresh
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(refresh, refreshInterval);
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, refresh]);
-
-  // Auto clear messages
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(clearMessage, 5000);
-    return () => clearTimeout(timer);
-  }, [message, clearMessage]);
+  }, [dhcpOptions, services.dhcpOptions, refresh, setMessage]);
 
   return {
     options: dhcpOptions,
@@ -121,6 +100,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
     createOption,
     updateOption,
     deleteOption,
+    resetToDefaults,
     message,
     clearMessage,
   };

@@ -41,4 +41,26 @@ export class TemplateService extends BaseService {
   async getVariables(): Promise<TemplateVariable[]> {
     return this.get<TemplateVariable[]>('/templates/_/variables');
   }
+
+  async templatize(content: string, variables?: DetectedVariable[]): Promise<TemplatizeResponse> {
+    return this.post<TemplatizeResponse>('/templates/_/templatize', {
+      content,
+      variables,
+    });
+  }
+}
+
+// Types for templatizer
+export interface DetectedVariable {
+  name: string;
+  value: string;
+  type: string;
+  start_index: number;
+  end_index: number;
+  description: string;
+}
+
+export interface TemplatizeResponse {
+  detected_variables: DetectedVariable[];
+  template_content: string;
 }

@@ -30,3 +30,4 @@ export const DownloadIcon = ({ size }: { size?: number }) => <Icon name="backup"
 export const ClockIcon = ({ size }: { size?: number }) => <Icon name="history" size={size} />;
 export const XIcon = ({ size }: { size?: number }) => <Icon name="close" size={size} />;
 export const SettingsIcon = ({ size }: { size?: number }) => <Icon name="settings" size={size} />;
+export const SpinnerIcon = ({ size }: { size?: number }) => <Icon name="sync" size={size} className="icon-spin" />;

@@ -3,6 +3,39 @@
 import { BaseService } from './base';
 import type { Device, Backup } from '../types';
 
+export interface PingResult {
+  reachable: boolean;
+  latency?: string;
+  error?: string;
+}
+
+export interface SSHResult {
+  connected: boolean;
+  uptime?: string;
+  error?: string;
+}
+
+export interface ConnectResult {
+  ping: PingResult;
+  ssh: SSHResult;
+  success: boolean;
+}
+
+export interface ConfigResult {
+  mac: string;
+  hostname: string;
+  filename: string;
+  content: string;
+  exists: boolean;
+}
+
+export interface BackupContentResult {
+  id: number;
+  filename: string;
+  content: string;
+  exists: boolean;
+}
+
 export class DeviceService extends BaseService {
   async list(): Promise<Device[]> {
     return this.get<Device[]>('/devices');
@@ -30,5 +63,17 @@ export class DeviceService extends BaseService {
 
   async listBackups(mac: string): Promise<Backup[]> {
     return this.get<Backup[]>(`/devices/${encodeURIComponent(mac)}/backups`);
+  }
+
+  async connect(mac: string): Promise<ConnectResult> {
+    return this.post<ConnectResult>(`/devices/${encodeURIComponent(mac)}/connect`);
+  }
+
+  async getConfig(mac: string): Promise<ConfigResult> {
+    return this.get<ConfigResult>(`/devices/${encodeURIComponent(mac)}/config`);
+  }
+
+  async getBackupContent(id: number): Promise<BackupContentResult> {
+    return this.get<BackupContentResult>(`/backups/${id}`);
   }
 }

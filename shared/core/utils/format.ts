@@ -34,3 +34,67 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
+
+/**
+ * Format a future expiry time as a human-readable duration
+ * @param expiresAt - ISO date string of the expiry time
+ * @returns Duration string (e.g., "2h 15m", "45m", "Expired")
+ */
+export function formatExpiry(expiresAt: string): string {
+  const expiry = new Date(expiresAt);
+  const now = new Date();
+  const diffMs = expiry.getTime() - now.getTime();
+
+  if (diffMs < 0) {
+    return 'Expired';
+  }
+
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (diffHours > 0) {
+    return `${diffHours}h ${diffMins}m`;
+  }
+  return `${diffMins}m`;
+}
+
+/**
+ * Discovery event types
+ */
+export type DiscoveryEventType = 'discovered' | 'added' | 'lease_renewed' | string;
+
+/**
+ * Format a discovery event type as a human-readable label
+ * @param eventType - The event type string
+ * @returns Human-readable label
+ */
+export function formatEventType(eventType: DiscoveryEventType): string {
+  switch (eventType) {
+    case 'discovered':
+      return 'New Device';
+    case 'added':
+      return 'Device Added';
+    case 'lease_renewed':
+      return 'Lease Renewed';
+    default:
+      return eventType;
+  }
+}
+
+/**
+ * Get the icon name for a discovery event type
+ * @param eventType - The event type string
+ * @returns Material icon name
+ */
+export function getEventTypeIcon(eventType: DiscoveryEventType): string {
+  switch (eventType) {
+    case 'discovered':
+      return 'fiber_new';
+    case 'added':
+      return 'add_circle';
+    case 'lease_renewed':
+      return 'refresh';
+    default:
+      return 'schedule';
+  }
+}

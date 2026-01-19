@@ -1,29 +1,13 @@
 // Domain types - platform agnostic
 
-// Vendor options for network devices
-export const DEVICE_VENDORS = [
-  { value: '', label: 'Select Vendor...' },
-  { value: 'opengear', label: 'OpenGear' },
-  { value: 'cisco', label: 'Cisco' },
-  { value: 'juniper', label: 'Juniper' },
-  { value: 'arista', label: 'Arista' },
-  { value: 'aruba', label: 'Aruba' },
-  { value: 'dell', label: 'Dell' },
-  { value: 'hp', label: 'HP/HPE' },
-  { value: 'fortinet', label: 'Fortinet' },
-  { value: 'paloalto', label: 'Palo Alto' },
-  { value: 'ubiquiti', label: 'Ubiquiti' },
-  { value: 'mikrotik', label: 'MikroTik' },
-  { value: 'other', label: 'Other' },
-] as const;
-
-export type DeviceVendor = typeof DEVICE_VENDORS[number]['value'];
+import { getVendorCache } from './utils/vendor';
 
 export interface Device {
   mac: string;
   ip: string;
   hostname: string;
   vendor?: string;
+  model?: string;
   serial_number?: string;
   config_template: string;
   ssh_user?: string;
@@ -42,6 +26,7 @@ export interface DeviceFormData {
   ip: string;
   hostname: string;
   vendor: string;
+  model: string;
   serial_number: string;
   config_template: string;
   ssh_user: string;
@@ -86,6 +71,9 @@ export interface Vendor {
   name: string;
   backup_command: string;
   ssh_port: number;
+  mac_prefixes: string[];
+  vendor_class?: string; // DHCP Option 60 vendor class identifier
+  default_template?: string; // Default template ID for this vendor
   device_count?: number;
   created_at?: string;
   updated_at?: string;
@@ -96,6 +84,9 @@ export interface VendorFormData {
   name: string;
   backup_command: string;
   ssh_port: number;
+  mac_prefixes: string[];
+  vendor_class: string;
+  default_template: string;
 }
 
 // DHCP Option types
@@ -157,6 +148,67 @@ export interface TemplateVariable {
   name: string;
   description: string;
   example: string;
+}
+
+// Discovery types
+export interface DiscoveredDevice {
+  mac: string;
+  ip: string;
+  hostname: string;
+  expiry_time: number;
+  expires_at: string;
+  first_seen?: string;
+}
+
+export type DiscoveryEventType = 'discovered' | 'added' | 'lease_renewed' | 'lease_expired';
+
+export interface DiscoveryLog {
+  id: number;
+  event_type: DiscoveryEventType;
+  mac: string;
+  ip: string;
+  hostname?: string;
+  vendor?: string;
+  message?: string;
+  created_at: string;
+}
+
+// Test container types
+export interface TestContainer {
+  id: string;
+  name: string;
+  hostname: string;
+  mac: string;
+  ip: string;
+  status: string;
+  created_at: string;
+}
+
+export interface SpawnContainerRequest {
+  hostname?: string;
+  mac?: string;
+  vendor_class?: string; // DHCP Option 60 vendor class identifier
+  config_method?: 'tftp' | 'http' | 'both'; // Config fetch method
+}
+
+// Config fetch method options
+export const CONFIG_METHOD_OPTIONS = [
+  { value: 'tftp', label: 'TFTP', description: 'Traditional TFTP-based config fetch (Cisco IOS, Juniper, etc.)' },
+  { value: 'http', label: 'HTTP', description: 'HTTP-based config fetch (OpenGear, newer devices)' },
+  { value: 'both', label: 'Both (TFTP first)', description: 'Try TFTP first, fall back to HTTP' },
+] as const;
+
+// Get the default template for a vendor using vendor cache
+export function getDefaultTemplateForVendor(vendorId: string): string {
+  const vendors = getVendorCache();
+  if (vendors) {
+    const vendor = vendors.find((v) => v.id.toLowerCase() === vendorId.toLowerCase());
+    if (vendor?.default_template) {
+      return vendor.default_template;
+    }
+  }
+  // Fallback to generic-switch if vendor not found or no default_template set
+  return 'generic-switch';
 }
 
 // API Response types

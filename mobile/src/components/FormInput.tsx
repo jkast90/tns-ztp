@@ -1,4 +1,5 @@
 import { View, Text, TextInput, StyleSheet, TextInputProps } from 'react-native';
+import { useAppTheme } from '../context';
 
 interface Props extends TextInputProps {
   label: string;
@@ -6,20 +7,29 @@ interface Props extends TextInputProps {
 }
 
 export function FormInput({ label, error, style, ...props }: Props) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
       <TextInput
         style={[
           styles.input,
-          error && styles.inputError,
-          !props.editable && props.editable !== undefined && styles.inputDisabled,
+          {
+            backgroundColor: colors.bgPrimary,
+            borderColor: error ? colors.error : colors.border,
+            color: colors.textPrimary,
+          },
+          !props.editable && props.editable !== undefined && {
+            opacity: 0.6,
+            backgroundColor: colors.bgCard,
+          },
           style,
         ]}
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.textMuted}
         {...props}
       />
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
     </View>
   );
 }
@@ -29,31 +39,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#aaa',
     fontSize: 12,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#0f0f1a',
     borderWidth: 1,
-    borderColor: '#2a2a4e',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#fff',
     fontSize: 16,
   },
-  inputError: {
-    borderColor: '#ff5252',
-  },
-  inputDisabled: {
-    opacity: 0.6,
-    backgroundColor: '#1a1a2e',
-  },
   error: {
-    color: '#ff5252',
     fontSize: 12,
     marginTop: 4,
   },

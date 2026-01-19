@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { View, StyleSheet, TextInputProps } from 'react-native';
 import { FormInput } from './FormInput';
-import { Button } from './Button';
+import { ScanButton } from './ScanButton';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList, ScanField } from '../navigation/types';
@@ -105,12 +105,9 @@ export function ValidatedInput({
     return (
       <View style={styles.container}>
         <View style={styles.input}>{input}</View>
-        <Button
-          title="Scan"
-          onPress={handleScanPress}
-          size="md"
-          style={styles.button}
-        />
+        <View style={styles.scanButtonWrapper}>
+          <ScanButton onPress={handleScanPress} />
+        </View>
       </View>
     );
   }
@@ -121,13 +118,13 @@ export function ValidatedInput({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     gap: 8,
+    alignItems: 'flex-end',
   },
   input: {
     flex: 1,
   },
-  button: {
-    marginBottom: 12,
+  scanButtonWrapper: {
+    paddingBottom: 16, // Match FormInput's marginBottom
   },
 });

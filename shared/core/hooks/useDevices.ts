@@ -1,8 +1,9 @@
-// Device management hook - handles device CRUD operations and state
+// Device management hook - uses generic useCrud for CRUD operations
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { Device, Message } from '../types';
 import { getServices } from '../services';
+import { useCrud, type UseCrudOptions } from './useCrud';
 
 export interface UseDevicesOptions {
   autoRefresh?: boolean;
@@ -25,63 +26,31 @@ export interface UseDevicesReturn {
 export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
   const { autoRefresh = true, refreshInterval = 10000 } = options;
 
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<Message | null>(null);
+  const services = useMemo(() => getServices(), []);
 
-  const services = getServices();
+  const crudOptions: UseCrudOptions<Device> = useMemo(() => ({
+    autoRefresh,
+    refreshInterval,
+  }), [autoRefresh, refreshInterval]);
 
-  const clearMessage = useCallback(() => setMessage(null), []);
+  const {
+    items: devices,
+    loading,
+    error,
+    refresh,
+    create: createDevice,
+    update: updateDevice,
+    remove: deleteDevice,
+    message,
+    clearMessage,
+    setMessage,
+  } = useCrud({
+    service: services.devices,
+    labels: { singular: 'device', plural: 'devices' },
+    options: crudOptions,
+  });
 
-  const refresh = useCallback(async () => {
-    try {
-      const data = await services.devices.list();
-      setDevices(data || []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load devices');
-    } finally {
-      setLoading(false);
-    }
-  }, [services.devices]);
-
-  const createDevice = useCallback(async (device: Partial<Device>): Promise<boolean> => {
-    try {
-      await services.devices.create(device);
-      setMessage({ type: 'success', text: 'Device added successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to add device: ${err}` });
-      return false;
-    }
-  }, [services.devices, refresh]);
-
-  const updateDevice = useCallback(async (mac: string, device: Partial<Device>): Promise<boolean> => {
-    try {
-      await services.devices.update(mac, device);
-      setMessage({ type: 'success', text: 'Device updated successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to update device: ${err}` });
-      return false;
-    }
-  }, [services.devices, refresh]);
-
-  const deleteDevice = useCallback(async (mac: string): Promise<boolean> => {
-    try {
-      await services.devices.remove(mac);
-      setMessage({ type: 'success', text: 'Device deleted successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to delete device: ${err}` });
-      return false;
-    }
-  }, [services.devices, refresh]);
-
+  // Device-specific method: trigger backup
   const triggerBackup = useCallback(async (mac: string): Promise<boolean> => {
     try {
       await services.devices.triggerBackup(mac);
@@ -91,26 +60,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
       setMessage({ type: 'error', text: `Failed to trigger backup: ${err}` });
       return false;
     }
-  }, [services.devices]);
-
-  // Initial load
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Auto refresh
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(refresh, refreshInterval);
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, refresh]);
-
-  // Auto clear messages
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(clearMessage, 5000);
-    return () => clearTimeout(timer);
-  }, [message, clearMessage]);
+  }, [services.devices, setMessage]);
 
   return {
     devices,

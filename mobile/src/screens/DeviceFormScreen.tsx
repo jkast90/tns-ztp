@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { useDevices } from '../core';
+import { useDevices, useTemplates, useVendors, getDefaultTemplateForVendor, setVendorCache } from '../core';
 import type { DeviceFormData } from '../core';
 import type { RootStackParamList, ScanField } from '../navigation/types';
 import {
@@ -14,6 +14,7 @@ import {
   ScreenContainer,
 } from '../components';
 import { useDeviceForm, useScannedValue } from '../hooks';
+import { useAppTheme } from '../context';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'DeviceForm'>;
 type DeviceFormRouteProp = RouteProp<RootStackParamList, 'DeviceForm'>;
@@ -23,34 +24,64 @@ const emptyFormData: DeviceFormData = {
   ip: '',
   hostname: '',
   vendor: '',
+  model: '',
   serial_number: '',
-  config_template: 'default.template',
+  config_template: '',
   ssh_user: '',
   ssh_pass: '',
 };
 
 export function DeviceFormScreen() {
+  const { colors } = useAppTheme();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<DeviceFormRouteProp>();
-  const mac = route.params?.mac;
-  const isEditMode = !!mac;
+  const params = route.params;
+  const isEditMode = params?.editMode === true;
+  const mac = params?.mac;
 
   const { devices, createDevice, updateDevice, loading } = useDevices({ autoRefresh: false });
+  const { templates } = useTemplates({ vendorFilter: 'all' });
+  const { vendors } = useVendors();
   const device = isEditMode ? devices.find((d) => d.mac === mac) : null;
 
+  // Update vendor cache when vendors load (for MAC lookup)
+  useEffect(() => {
+    if (vendors.length > 0) {
+      setVendorCache(vendors);
+    }
+  }, [vendors]);
+
   const initialData = useMemo(() => {
-    if (!isEditMode || !device) return emptyFormData;
-    return {
-      mac: device.mac,
-      ip: device.ip,
-      hostname: device.hostname,
-      vendor: device.vendor || '',
-      serial_number: device.serial_number || '',
-      config_template: device.config_template,
-      ssh_user: device.ssh_user || '',
-      ssh_pass: device.ssh_pass || '',
-    };
-  }, [isEditMode, device]);
+    // For edit mode, use device data
+    if (isEditMode && device) {
+      return {
+        mac: device.mac,
+        ip: device.ip,
+        hostname: device.hostname,
+        vendor: device.vendor || '',
+        model: device.model || '',
+        serial_number: device.serial_number || '',
+        config_template: device.config_template,
+        ssh_user: device.ssh_user || '',
+        ssh_pass: device.ssh_pass || '',
+      };
+    }
+    // For add mode, use params to pre-fill (e.g., from discovery)
+    if (params?.mac || params?.ip || params?.hostname) {
+      const vendor = params.vendor || '';
+      // Auto-select template based on vendor
+      const config_template = vendor ? getDefaultTemplateForVendor(vendor) : '';
+      return {
+        ...emptyFormData,
+        mac: params.mac || '',
+        ip: params.ip || '',
+        hostname: params.hostname || '',
+        vendor,
+        config_template,
+      };
+    }
+    return emptyFormData;
+  }, [isEditMode, device, params]);
 
   const handleFormSubmit = useCallback(
     async (data: DeviceFormData) => {
@@ -87,6 +118,7 @@ export function DeviceFormScreen() {
         ip: device.ip,
         hostname: device.hostname,
         vendor: device.vendor || '',
+        model: device.model || '',
         serial_number: device.serial_number || '',
         config_template: device.config_template,
         ssh_user: device.ssh_user || '',
@@ -113,7 +145,7 @@ export function DeviceFormScreen() {
 
   if (isEditMode && loading) {
     return (
-      <View style={styles.fullScreen}>
+      <View style={[styles.fullScreen, { backgroundColor: colors.bgPrimary }]}>
         <LoadingState message="Loading device..." />
       </View>
     );
@@ -121,7 +153,7 @@ export function DeviceFormScreen() {
 
   if (isEditMode && !device) {
     return (
-      <View style={styles.fullScreen}>
+      <View style={[styles.fullScreen, { backgroundColor: colors.bgPrimary }]}>
         <ErrorState
           title="Not Found"
           message="Device not found"
@@ -142,6 +174,8 @@ export function DeviceFormScreen() {
         onChange={handleChange}
         mac={mac}
         macEditable={!isEditMode}
+        templates={templates}
+        vendors={vendors}
       />
 
       <ActionButtons
@@ -157,6 +191,5 @@ export function DeviceFormScreen() {
 const styles = StyleSheet.create({
   fullScreen: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
   },
 });

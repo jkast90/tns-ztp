@@ -1,3 +1,5 @@
+import { CloseButton } from './CloseButton';
+
 interface MessageProps {
   type: 'success' | 'error';
   text: string;
@@ -9,19 +11,13 @@ export function Message({ type, text, onDismiss }: MessageProps) {
     <div className={`message ${type}`}>
       {text}
       {onDismiss && (
-        <button
+        <CloseButton
+          size="sm"
+          variant="subtle"
           onClick={onDismiss}
-          style={{
-            marginLeft: '12px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            opacity: 0.7,
-          }}
-        >
-          &times;
-        </button>
+          label="Dismiss message"
+          style={{ marginLeft: '12px' }}
+        />
       )}
     </div>
   );

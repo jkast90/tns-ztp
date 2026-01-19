@@ -23,6 +23,7 @@ func NewDhcpOptionHandler(store *db.Store, configReload func() error) *DhcpOptio
 // RegisterRoutes registers all DHCP option routes
 func (h *DhcpOptionHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/dhcp-options", h.List)
+	r.GET("/dhcp-options/defaults", h.ListDefaults)
 	r.GET("/dhcp-options/:id", h.Get)
 	r.POST("/dhcp-options", h.Create)
 	r.PUT("/dhcp-options/:id", h.Update)
@@ -36,12 +37,13 @@ func (h *DhcpOptionHandler) List(c *gin.Context) {
 		internalError(c, err)
 		return
 	}
+	okList(c, options)
+}
 
-	if options == nil {
-		options = []models.DhcpOption{}
-	}
-
-	ok(c, options)
+// ListDefaults returns the default DHCP options (for reset functionality)
+func (h *DhcpOptionHandler) ListDefaults(c *gin.Context) {
+	defaults := db.GetDefaultDhcpOptions()
+	okList(c, defaults)
 }
 
 // Get returns a single DHCP option by ID

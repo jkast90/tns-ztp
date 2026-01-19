@@ -77,7 +77,7 @@ export function DevicesScreen() {
   const renderDevice = ({ item }: { item: Device }) => (
     <DeviceCard
       device={item}
-      onPress={() => navigation.navigate('DeviceForm', { mac: item.mac })}
+      onPress={() => navigation.navigate('DeviceForm', { mac: item.mac, editMode: true })}
       onDelete={() => handleDelete(item)}
     />
   );

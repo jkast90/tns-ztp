@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import type { Device } from '../core';
-import { useForm, validateDeviceForm, DEVICE_VENDORS } from '../core';
+import { useEffect, useCallback, useMemo } from 'react';
+import type { Device, Template, Vendor } from '@core';
+import { useForm, validateDeviceForm, lookupVendorByMac, getDefaultTemplateForVendor } from '@core';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
 import { FormField } from './FormField';
@@ -9,6 +9,9 @@ import { SelectField } from './SelectField';
 interface Props {
   isOpen: boolean;
   device?: Device | null;
+  initialData?: Partial<DeviceFormData> | null;
+  templates?: Template[];
+  vendors?: Vendor[];
   onSubmit: (device: Partial<Device>) => Promise<void>;
   onClose: () => void;
 }
@@ -18,6 +21,7 @@ type DeviceFormData = {
   ip: string;
   hostname: string;
   vendor: string;
+  model: string;
   serial_number: string;
   config_template: string;
   ssh_user: string;
@@ -29,14 +33,34 @@ const emptyFormData: DeviceFormData = {
   ip: '',
   hostname: '',
   vendor: '',
+  model: '',
   serial_number: '',
   config_template: '',
   ssh_user: '',
   ssh_pass: '',
 };
 
-export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
+export function DeviceForm({ isOpen, device, initialData, templates = [], vendors = [], onSubmit, onClose }: Props) {
   const isEditing = !!device;
+
+  // Build vendor options for select dropdown
+  const vendorOptions = useMemo(() => {
+    const options = [{ value: '', label: 'Select Vendor...' }];
+    vendors.forEach((v) => {
+      options.push({ value: v.id, label: v.name });
+    });
+    return options;
+  }, [vendors]);
+
+  // Build template options for select dropdown
+  const templateOptions = useMemo(() => {
+    const options = [{ value: '', label: 'Select Template...' }];
+    templates.forEach((t) => {
+      const vendorSuffix = t.vendor_id ? ` (${t.vendor_id})` : ' (global)';
+      options.push({ value: t.id, label: `${t.name}${vendorSuffix}` });
+    });
+    return options;
+  }, [templates]);
 
   const {
     formData,
@@ -63,26 +87,66 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
           ip: device.ip,
           hostname: device.hostname,
           vendor: device.vendor || '',
+          model: device.model || '',
           serial_number: device.serial_number || '',
           config_template: device.config_template || '',
           ssh_user: device.ssh_user || '',
           ssh_pass: device.ssh_pass || '',
         });
+      } else if (initialData) {
+        // Pre-fill with initial data from discovery
+        resetForm({
+          ...emptyFormData,
+          ...initialData,
+        });
       } else {
         resetForm(emptyFormData);
       }
     }
-  }, [device, isOpen, resetForm]);
+  }, [device, initialData, isOpen, resetForm]);
 
   const onFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSubmit();
   };
 
+  // Auto-select vendor and template when MAC changes
+  const handleMacChange = useCallback((mac: string) => {
+    handleChange('mac', mac);
+    // Only auto-select if vendor is empty and MAC looks complete (17 chars with separators)
+    if (!formData.vendor && mac.replace(/[^a-fA-F0-9]/g, '').length >= 6) {
+      const detectedVendor = lookupVendorByMac(mac);
+      if (detectedVendor && detectedVendor !== 'Local') {
+        handleChange('vendor', detectedVendor);
+        // Also auto-select default template for this vendor
+        if (!formData.config_template) {
+          const defaultTemplate = getDefaultTemplateForVendor(detectedVendor);
+          handleChange('config_template', defaultTemplate);
+        }
+      }
+    }
+  }, [formData.vendor, formData.config_template, handleChange]);
+
+  // Auto-select template when vendor changes
+  const handleVendorChange = useCallback((vendor: string) => {
+    handleChange('vendor', vendor);
+    // Auto-select default template for this vendor if template is empty
+    if (vendor && !formData.config_template) {
+      const defaultTemplate = getDefaultTemplateForVendor(vendor);
+      handleChange('config_template', defaultTemplate);
+    }
+  }, [formData.config_template, handleChange]);
+
   // Adapter for web input onChange events
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    handleChange(name as keyof DeviceFormData, value);
+    if (name === 'mac') {
+      handleMacChange(value);
+    } else if (name === 'vendor') {
+      handleVendorChange(value);
+    } else {
+      handleChange(name as keyof DeviceFormData, value);
+    }
   };
 
   return (
@@ -133,7 +197,15 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
             name="vendor"
             value={formData.vendor}
             onChange={onInputChange}
-            options={DEVICE_VENDORS}
+            options={vendorOptions}
+          />
+          <FormField
+            label="Model"
+            name="model"
+            type="text"
+            value={formData.model}
+            onChange={onInputChange}
+            placeholder="WS-C3850-24T (optional)"
           />
           <FormField
             label="Serial Number"
@@ -143,13 +215,15 @@ export function DeviceForm({ isOpen, device, onSubmit, onClose }: Props) {
             onChange={onInputChange}
             placeholder="SN123456 (optional)"
           />
-          <FormField
+        </div>
+
+        <div className="form-row">
+          <SelectField
             label="Config Template"
             name="config_template"
-            type="text"
             value={formData.config_template}
             onChange={onInputChange}
-            placeholder="switch.template (optional)"
+            options={templateOptions}
           />
         </div>
 

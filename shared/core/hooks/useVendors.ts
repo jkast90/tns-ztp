@@ -1,8 +1,9 @@
-// Vendor management hook - handles vendor CRUD operations and state
+// Vendor management hook - uses generic useCrud for CRUD operations
 
-import { useState, useCallback, useEffect } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { Vendor, Message } from '../types';
 import { getServices } from '../services';
+import { useCrud, type UseCrudOptions } from './useCrud';
 
 export interface UseVendorsOptions {
   autoRefresh?: boolean;
@@ -17,6 +18,7 @@ export interface UseVendorsReturn {
   createVendor: (vendor: Partial<Vendor>) => Promise<boolean>;
   updateVendor: (id: string, vendor: Partial<Vendor>) => Promise<boolean>;
   deleteVendor: (id: string) => Promise<boolean>;
+  resetToDefaults: () => Promise<boolean>;
   message: Message | null;
   clearMessage: () => void;
 }
@@ -24,81 +26,60 @@ export interface UseVendorsReturn {
 export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
   const { autoRefresh = false, refreshInterval = 30000 } = options;
 
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<Message | null>(null);
+  const services = useMemo(() => getServices(), []);
 
-  const services = getServices();
+  const crudOptions: UseCrudOptions<Vendor> = useMemo(() => ({
+    autoRefresh,
+    refreshInterval,
+  }), [autoRefresh, refreshInterval]);
 
-  const clearMessage = useCallback(() => setMessage(null), []);
+  const {
+    items: vendors,
+    loading,
+    error,
+    refresh,
+    create: createVendor,
+    update: updateVendor,
+    remove: deleteVendor,
+    message,
+    clearMessage,
+    setMessage,
+  } = useCrud({
+    service: services.vendors,
+    labels: { singular: 'vendor', plural: 'vendors' },
+    options: crudOptions,
+  });
 
-  const refresh = useCallback(async () => {
+  // Reset to defaults: update existing vendors with defaults or create missing ones
+  const resetToDefaults = useCallback(async (): Promise<boolean> => {
     try {
-      const data = await services.vendors.list();
-      setVendors(data || []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load vendors');
-    } finally {
-      setLoading(false);
-    }
-  }, [services.vendors]);
+      // Get defaults from API
+      const defaults = await services.vendors.listDefaults();
 
-  const createVendor = useCallback(async (vendor: Partial<Vendor>): Promise<boolean> => {
-    try {
-      await services.vendors.create(vendor);
-      setMessage({ type: 'success', text: 'Vendor added successfully' });
+      // Update existing vendors with default MAC prefixes, or create if missing
+      for (const defaultVendor of defaults) {
+        const existing = vendors.find(v => v.id === defaultVendor.id);
+        if (existing) {
+          // Update with default MAC prefixes
+          await services.vendors.update(defaultVendor.id, {
+            ...existing,
+            mac_prefixes: defaultVendor.mac_prefixes,
+          });
+        } else {
+          // Create the vendor
+          await services.vendors.create(defaultVendor);
+        }
+      }
+
       await refresh();
+      setMessage({ type: 'success', text: 'Vendors reset to defaults' });
       return true;
     } catch (err) {
-      setMessage({ type: 'error', text: `Failed to add vendor: ${err}` });
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reset vendors';
+      setMessage({ type: 'error', text: errorMessage });
       return false;
     }
-  }, [services.vendors, refresh]);
-
-  const updateVendor = useCallback(async (id: string, vendor: Partial<Vendor>): Promise<boolean> => {
-    try {
-      await services.vendors.update(id, vendor);
-      setMessage({ type: 'success', text: 'Vendor updated successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to update vendor: ${err}` });
-      return false;
-    }
-  }, [services.vendors, refresh]);
-
-  const deleteVendor = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      await services.vendors.remove(id);
-      setMessage({ type: 'success', text: 'Vendor deleted successfully' });
-      await refresh();
-      return true;
-    } catch (err) {
-      setMessage({ type: 'error', text: `Failed to delete vendor: ${err}` });
-      return false;
-    }
-  }, [services.vendors, refresh]);
-
-  // Initial load
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Auto refresh
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(refresh, refreshInterval);
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, refresh]);
-
-  // Auto clear messages
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(clearMessage, 5000);
-    return () => clearTimeout(timer);
-  }, [message, clearMessage]);
+  }, [vendors, services.vendors, refresh, setMessage]);
 
   return {
     vendors,
@@ -108,6 +89,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
     createVendor,
     updateVendor,
     deleteVendor,
+    resetToDefaults,
     message,
     clearMessage,
   };

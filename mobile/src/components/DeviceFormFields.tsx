@@ -1,5 +1,6 @@
-import type { DeviceFormData } from '../core';
-import { DEVICE_VENDORS } from '../core';
+import { useCallback, useMemo } from 'react';
+import type { DeviceFormData, Template, Vendor } from '../core';
+import { lookupVendorByMac, getDefaultTemplateForVendor } from '../core';
 import { Card } from './Card';
 import { FormInput } from './FormInput';
 import { FormSelect } from './FormSelect';
@@ -11,6 +12,8 @@ interface DeviceFormFieldsProps {
   onChange: (name: keyof DeviceFormData, value: string) => void;
   mac?: string;
   macEditable?: boolean;
+  templates?: Template[];
+  vendors?: Vendor[];
 }
 
 export function DeviceFormFields({
@@ -19,14 +22,65 @@ export function DeviceFormFields({
   onChange,
   mac,
   macEditable = true,
+  templates = [],
+  vendors = [],
 }: DeviceFormFieldsProps) {
+  // Build vendor options for select dropdown
+  const vendorOptions = useMemo(() => {
+    const options = [{ value: '', label: 'Select Vendor...' }];
+    vendors.forEach((v) => {
+      options.push({ value: v.id, label: v.name });
+    });
+    return options;
+  }, [vendors]);
+
+  // Build template options for select dropdown
+  const templateOptions = useMemo(() => {
+    const options = [{ value: '', label: 'Select Template...' }];
+    templates.forEach((t) => {
+      const vendorSuffix = t.vendor_id ? ` (${t.vendor_id})` : ' (global)';
+      options.push({ value: t.id, label: `${t.name}${vendorSuffix}` });
+    });
+    return options;
+  }, [templates]);
+
+  // Auto-select vendor and template when MAC changes
+  const handleMacChange = useCallback((value: string) => {
+    onChange('mac', value);
+    // Only auto-select if vendor is empty and MAC looks complete (at least 6 hex chars)
+    if (!formData.vendor && value.replace(/[^a-fA-F0-9]/g, '').length >= 6) {
+      const detectedVendor = lookupVendorByMac(value);
+      if (detectedVendor && detectedVendor !== 'Local') {
+        onChange('vendor', detectedVendor);
+        // Also auto-select default template for this vendor
+        const defaultTemplate = getDefaultTemplateForVendor(detectedVendor);
+        if (!formData.config_template) {
+          onChange('config_template', defaultTemplate);
+        }
+      }
+    }
+  }, [formData.vendor, formData.config_template, onChange]);
+
+  // Auto-select template when vendor changes
+  const handleVendorChange = useCallback((value: string) => {
+    onChange('vendor', value);
+    // Auto-select default template for this vendor if template is empty or was auto-selected
+    if (value) {
+      const defaultTemplate = getDefaultTemplateForVendor(value);
+      // Only auto-fill if template is empty
+      if (!formData.config_template) {
+        onChange('config_template', defaultTemplate);
+      }
+    }
+  }, [formData.config_template, onChange]);
+
   return (
     <>
       <Card title="Device Information">
         <ValidatedInput
           label="MAC Address"
           value={formData.mac}
-          onChangeText={(value) => onChange('mac', value)}
+          onChangeText={handleMacChange}
           placeholder="00:11:22:33:44:55"
           autoCapitalize="none"
           validation="mac"
@@ -60,9 +114,19 @@ export function DeviceFormFields({
         <FormSelect
           label="Vendor"
           value={formData.vendor}
-          options={DEVICE_VENDORS}
-          onChange={(value) => onChange('vendor', value)}
+          options={vendorOptions}
+          onChange={handleVendorChange}
           placeholder="Select Vendor..."
+        />
+        <ValidatedInput
+          label="Model"
+          value={formData.model}
+          onChangeText={(value) => onChange('model', value)}
+          placeholder="WS-C3850-24T"
+          autoCapitalize="characters"
+          scannable
+          scanField="model"
+          mac={mac}
         />
         <ValidatedInput
           label="Serial Number"
@@ -74,12 +138,12 @@ export function DeviceFormFields({
           scanField="serial_number"
           mac={mac}
         />
-        <FormInput
+        <FormSelect
           label="Config Template"
           value={formData.config_template}
-          onChangeText={(value) => onChange('config_template', value)}
-          placeholder="default.template"
-          autoCapitalize="none"
+          options={templateOptions}
+          onChange={(value) => onChange('config_template', value)}
+          placeholder="Select Template..."
         />
       </Card>
 

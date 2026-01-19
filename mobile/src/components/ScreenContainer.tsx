@@ -1,5 +1,6 @@
 import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppTheme } from '../context';
 
 interface Props {
   children: React.ReactNode;
@@ -12,6 +13,8 @@ export function ScreenContainer({
   scrollable = true,
   keyboardAvoiding = true,
 }: Props) {
+  const { colors } = useAppTheme();
+
   const content = scrollable ? (
     <ScrollView
       style={styles.scrollView}
@@ -26,7 +29,7 @@ export function ScreenContainer({
 
   if (keyboardAvoiding) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]} edges={['bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -38,7 +41,7 @@ export function ScreenContainer({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]} edges={['bottom']}>
       {content}
     </SafeAreaView>
   );
@@ -47,7 +50,6 @@ export function ScreenContainer({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
   },
   flex: {
     flex: 1,

@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Button } from './Button';
+import { useAppTheme } from '../context';
 
 interface Props {
   title?: string;
@@ -22,11 +23,15 @@ export function ErrorState({
   primaryAction,
   secondaryAction,
 }: Props) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
-      {details && <Text style={styles.details}>{details}</Text>}
+      <Text style={[styles.title, { color: colors.error }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.textMuted }]}>{message}</Text>
+      {details && (
+        <Text style={[styles.details, { color: colors.textMuted }]}>{details}</Text>
+      )}
       {primaryAction && (
         <Button
           title={primaryAction.label}
@@ -55,19 +60,16 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   title: {
-    color: '#ff5252',
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 12,
   },
   message: {
-    color: '#888',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 8,
   },
   details: {
-    color: '#666',
     fontSize: 12,
     fontFamily: 'monospace',
     marginBottom: 24,

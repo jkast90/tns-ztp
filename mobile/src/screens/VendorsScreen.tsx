@@ -4,18 +4,23 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  Alert,
   TextInput,
-  Modal,
-  Pressable,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import type { Vendor, VendorFormData } from '../core';
-import { DEVICE_VENDORS, useDevices, useVendors } from '../core';
-import { Card, Button, IconButton, EmptyState } from '../components';
+import { getVendorSelectOptions, useDevices, useVendors, EMPTY_VENDOR_FORM } from '../core';
+import {
+  Card,
+  Button,
+  EmptyState,
+  LoadingState,
+  ErrorState,
+  CardActions,
+  FormModal,
+  FormInput,
+} from '../components';
+import { confirmDelete, confirmReset, showError } from '../utils';
+import { useAppTheme } from '../context';
 
 function getDefaultBackupCommand(vendorId: string): string {
   switch (vendorId) {
@@ -38,23 +43,18 @@ function getDefaultBackupCommand(vendorId: string): string {
   }
 }
 
-const DEFAULT_VENDORS: Omit<Vendor, 'created_at' | 'updated_at'>[] = DEVICE_VENDORS
+const DEFAULT_VENDORS: Omit<Vendor, 'created_at' | 'updated_at'>[] = getVendorSelectOptions()
   .filter((v) => v.value !== '')
   .map((v) => ({
     id: v.value,
     name: v.label,
     backup_command: getDefaultBackupCommand(v.value),
     ssh_port: 22,
+    mac_prefixes: [],
   }));
 
-const emptyFormData: VendorFormData = {
-  id: '',
-  name: '',
-  backup_command: 'show running-config',
-  ssh_port: 22,
-};
-
 export function VendorsScreen() {
+  const { colors } = useAppTheme();
   const {
     vendors,
     loading,
@@ -62,21 +62,13 @@ export function VendorsScreen() {
     createVendor,
     updateVendor,
     deleteVendor,
-    message,
+    refresh,
   } = useVendors();
 
   const [showForm, setShowForm] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
-  const [formData, setFormData] = useState<VendorFormData>(emptyFormData);
+  const [formData, setFormData] = useState<VendorFormData>(EMPTY_VENDOR_FORM);
   const { devices } = useDevices();
-
-  // Show messages
-  if (message) {
-    Alert.alert(
-      message.type === 'error' ? 'Error' : 'Success',
-      message.text
-    );
-  }
 
   // Calculate device counts per vendor
   const vendorStats = useMemo(() => {
@@ -102,25 +94,28 @@ export function VendorsScreen() {
       name: vendor.name,
       backup_command: vendor.backup_command,
       ssh_port: vendor.ssh_port,
+      mac_prefixes: vendor.mac_prefixes || [],
+      vendor_class: vendor.vendor_class || '',
+      default_template: vendor.default_template || '',
     });
     setShowForm(true);
   };
 
   const handleAdd = () => {
     setEditingVendor(null);
-    setFormData(emptyFormData);
+    setFormData(EMPTY_VENDOR_FORM);
     setShowForm(true);
   };
 
   const handleCloseForm = () => {
     setShowForm(false);
     setEditingVendor(null);
-    setFormData(emptyFormData);
+    setFormData(EMPTY_VENDOR_FORM);
   };
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Vendor name is required');
+      showError('Vendor name is required');
       return;
     }
 
@@ -138,104 +133,83 @@ export function VendorsScreen() {
 
   const handleDelete = (vendor: Vendor & { device_count: number }) => {
     if (vendor.device_count > 0) {
-      Alert.alert('Cannot Delete', 'This vendor has devices assigned to it.');
+      showError('This vendor has devices assigned to it.', 'Cannot Delete');
       return;
     }
 
-    Alert.alert(
-      'Delete Vendor',
-      `Are you sure you want to delete "${vendor.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteVendor(vendor.id);
-          },
-        },
-      ]
-    );
+    confirmDelete({
+      itemName: vendor.name,
+      itemType: 'vendor',
+      onConfirm: async () => {
+        await deleteVendor(vendor.id);
+      },
+    });
   };
 
   const handleReset = () => {
-    Alert.alert(
-      'Reset Vendors',
-      'Reset all vendors to defaults? This will remove any custom vendors.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            // Delete all vendors without devices
-            for (const vendor of vendors) {
-              if ((vendor.device_count || 0) === 0) {
-                await deleteVendor(vendor.id);
-              }
-            }
-            // Create default vendors
-            for (const vendor of DEFAULT_VENDORS) {
-              const exists = vendors.find((v) => v.id === vendor.id);
-              if (!exists) {
-                await createVendor(vendor);
-              }
-            }
-          },
-        },
-      ]
-    );
+    confirmReset({
+      title: 'Reset Vendors',
+      message: 'Reset all vendors to defaults? This will remove any custom vendors.',
+      onConfirm: async () => {
+        // Delete all vendors without devices
+        for (const vendor of vendors) {
+          if ((vendor.device_count || 0) === 0) {
+            await deleteVendor(vendor.id);
+          }
+        }
+        // Create default vendors
+        for (const vendor of DEFAULT_VENDORS) {
+          const exists = vendors.find((v) => v.id === vendor.id);
+          if (!exists) {
+            await createVendor(vendor);
+          }
+        }
+      },
+    });
   };
 
   const renderVendor = ({ item }: { item: Vendor & { device_count: number } }) => (
     <Card style={styles.vendorCard}>
       <View style={styles.vendorHeader}>
-        <Text style={styles.vendorName}>{item.name}</Text>
-        <View style={styles.deviceCount}>
-          <Text style={[styles.deviceCountText, item.device_count > 0 && styles.deviceCountActive]}>
+        <Text style={[styles.vendorName, { color: colors.textPrimary }]}>{item.name}</Text>
+        <View style={[styles.deviceCount, { backgroundColor: colors.bgSecondary }]}>
+          <Text style={[styles.deviceCountText, { color: item.device_count > 0 ? colors.accentBlue : colors.textMuted }]}>
             {item.device_count} devices
           </Text>
         </View>
       </View>
       <View style={styles.vendorDetails}>
-        <Text style={styles.detailLabel}>Backup Command:</Text>
-        <Text style={styles.detailValue}>{item.backup_command}</Text>
+        <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Backup Command:</Text>
+        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{item.backup_command}</Text>
       </View>
       <View style={styles.vendorDetails}>
-        <Text style={styles.detailLabel}>SSH Port:</Text>
-        <Text style={styles.detailValue}>{item.ssh_port}</Text>
+        <Text style={[styles.detailLabel, { color: colors.textMuted }]}>SSH Port:</Text>
+        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{item.ssh_port}</Text>
       </View>
-      <View style={styles.vendorActions}>
-        <IconButton icon="edit" onPress={() => handleEdit(item)} />
-        <IconButton
-          icon="delete"
-          onPress={() => handleDelete(item)}
-          disabled={item.device_count > 0}
-        />
-      </View>
+      <CardActions
+        onEdit={() => handleEdit(item)}
+        onDelete={() => handleDelete(item)}
+        deleteDisabled={item.device_count > 0}
+      />
     </Card>
   );
 
   if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4a9eff" />
-        <Text style={styles.loadingText}>Loading vendors...</Text>
-      </View>
-    );
+    return <LoadingState message="Loading vendors..." />;
   }
 
   if (error) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>{error}</Text>
-        <Button title="Retry" onPress={() => {}} variant="secondary" />
-      </View>
+      <ErrorState
+        title="Error"
+        message={error}
+        primaryAction={{ label: 'Retry', onPress: refresh }}
+      />
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       <View style={styles.actions}>
         <Button title="Add Vendor" onPress={handleAdd} icon="add" />
         <Button title="Reset" onPress={handleReset} variant="secondary" />
@@ -255,86 +229,47 @@ export function VendorsScreen() {
         contentContainerStyle={vendors.length === 0 ? styles.emptyList : undefined}
       />
 
-      <Modal
+      <FormModal
         visible={showForm}
-        animationType="slide"
-        transparent
-        onRequestClose={handleCloseForm}
+        onClose={handleCloseForm}
+        onSubmit={handleSubmit}
+        title={editingVendor ? 'Edit Vendor' : 'Add Vendor'}
+        isEditing={!!editingVendor}
+        size="medium"
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={handleCloseForm} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingVendor ? 'Edit Vendor' : 'Add Vendor'}
-              </Text>
-              <Pressable onPress={handleCloseForm}>
-                <Text style={styles.closeButton}>✕</Text>
-              </Pressable>
-            </View>
+        <FormInput
+          label="Vendor Name *"
+          value={formData.name}
+          onChangeText={(text) => setFormData((prev) => ({ ...prev, name: text }))}
+          placeholder="Acme Networks"
+          editable={!editingVendor}
+        />
 
-            <ScrollView style={styles.formScroll} keyboardShouldPersistTaps="handled">
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Vendor Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.name}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, name: text }))}
-                  placeholder="Acme Networks"
-                  placeholderTextColor="#666"
-                  editable={!editingVendor}
-                />
-              </View>
+        <FormInput
+          label="Vendor ID"
+          value={formData.id}
+          onChangeText={(text) => setFormData((prev) => ({ ...prev, id: text }))}
+          placeholder="acme (auto-generated)"
+          editable={!editingVendor}
+        />
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Vendor ID</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.id}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, id: text }))}
-                  placeholder="acme (auto-generated)"
-                  placeholderTextColor="#666"
-                  editable={!editingVendor}
-                />
-              </View>
+        <FormInput
+          label="Backup Command *"
+          value={formData.backup_command}
+          onChangeText={(text) => setFormData((prev) => ({ ...prev, backup_command: text }))}
+          placeholder="show running-config"
+        />
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Backup Command *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.backup_command}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, backup_command: text }))}
-                  placeholder="show running-config"
-                  placeholderTextColor="#666"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>SSH Port</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.ssh_port.toString()}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, ssh_port: parseInt(text, 10) || 22 }))
-                  }
-                  placeholder="22"
-                  placeholderTextColor="#666"
-                  keyboardType="number-pad"
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <Button title="Cancel" onPress={handleCloseForm} variant="secondary" />
-              <Button title={editingVendor ? 'Update' : 'Add'} onPress={handleSubmit} />
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        <FormInput
+          label="SSH Port"
+          value={formData.ssh_port.toString()}
+          onChangeText={(text) =>
+            setFormData((prev) => ({ ...prev, ssh_port: parseInt(text, 10) || 22 }))
+          }
+          placeholder="22"
+          keyboardType="number-pad"
+        />
+      </FormModal>
     </View>
   );
 }
@@ -342,19 +277,6 @@ export function VendorsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#888',
-    marginTop: 12,
-  },
-  errorText: {
-    color: '#ff6b6b',
-    marginBottom: 12,
   },
   actions: {
     flexDirection: 'row',
@@ -374,103 +296,30 @@ const styles = StyleSheet.create({
   vendorName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
   },
   deviceCount: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   deviceCountText: {
     fontSize: 12,
-    color: '#888',
-  },
-  deviceCountActive: {
-    color: '#4a9eff',
   },
   vendorDetails: {
     flexDirection: 'row',
     marginBottom: 4,
   },
   detailLabel: {
-    color: '#888',
     fontSize: 13,
     width: 120,
   },
   detailValue: {
-    color: '#fff',
     fontSize: 13,
     flex: 1,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  vendorActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 12,
-  },
   emptyList: {
     flex: 1,
     justifyContent: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    flex: 1,
-  },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  closeButton: {
-    fontSize: 20,
-    color: '#888',
-    padding: 4,
-  },
-  formScroll: {
-    padding: 16,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    color: '#888',
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
 });

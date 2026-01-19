@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useSettings } from '../core';
-import type { Settings } from '../core';
+import { useSettings } from '@core';
+import type { Settings } from '@core';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
 import { FormField } from './FormField';
+import { LayoutSettings } from './LayoutSettings';
 import { Message } from './Message';
 import { Icon } from './Icon';
 
@@ -173,6 +174,14 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
                 placeholder="Enrollment password"
               />
             </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>
+              <Icon name="view_quilt" size={18} />
+              Layout
+            </h3>
+            <LayoutSettings />
           </div>
 
           <div className="dialog-actions">

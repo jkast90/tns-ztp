@@ -1,5 +1,6 @@
-import { TouchableOpacity, StyleSheet, Text } from 'react-native';
+import { TouchableOpacity, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../context';
 
 interface Props {
   icon: string;
@@ -7,16 +8,24 @@ interface Props {
   size?: number;
   color?: string;
   disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function IconButton({ icon, onPress, size = 24, color = '#fff', disabled = false }: Props) {
+export function IconButton({ icon, onPress, size = 24, color, disabled = false, style }: Props) {
+  const { colors } = useAppTheme();
+  const iconColor = color || colors.textPrimary;
+
   return (
     <TouchableOpacity
-      style={[styles.button, disabled && styles.disabled]}
+      style={[styles.button, disabled && styles.disabled, style]}
       onPress={onPress}
       disabled={disabled}
     >
-      <MaterialIcons name={icon as keyof typeof MaterialIcons.glyphMap} size={size} color={disabled ? '#555' : color} />
+      <MaterialIcons
+        name={icon as keyof typeof MaterialIcons.glyphMap}
+        size={size}
+        color={disabled ? colors.textMuted : iconColor}
+      />
     </TouchableOpacity>
   );
 }

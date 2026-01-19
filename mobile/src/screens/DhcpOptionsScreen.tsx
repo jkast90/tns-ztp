@@ -3,20 +3,25 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
-  TextInput,
-  Modal,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Switch,
-  ActivityIndicator,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import type { DhcpOption, DhcpOptionFormData, DhcpOptionType } from '../core';
-import { DEVICE_VENDORS, COMMON_DHCP_OPTIONS, useDhcpOptions } from '../core';
-import { Card, Button, IconButton, EmptyState } from '../components';
+import { getVendorSelectOptions, getVendorName, COMMON_DHCP_OPTIONS, useDhcpOptions } from '../core';
+import {
+  Card,
+  Button,
+  EmptyState,
+  FormModal,
+  FormInput,
+  CardActions,
+  ThemedSwitch,
+  LoadingState,
+  ErrorState,
+} from '../components';
+import { confirmDelete, confirmReset, showError } from '../utils/alerts';
 
 const OPTION_TYPES: { value: DhcpOptionType; label: string }[] = [
   { value: 'string', label: 'String' },
@@ -94,13 +99,7 @@ export function DhcpOptionsScreen() {
   const [editingOption, setEditingOption] = useState<DhcpOption | null>(null);
   const [formData, setFormData] = useState<DhcpOptionFormData>(emptyFormData);
 
-  // Show messages
-  if (message) {
-    Alert.alert(
-      message.type === 'error' ? 'Error' : 'Success',
-      message.text
-    );
-  }
+  // Show messages - handled by hook's notification system
 
   // Filter options by vendor (client-side for immediate UI response)
   const filteredOptions = useMemo(() => {
@@ -124,9 +123,7 @@ export function DhcpOptionsScreen() {
     return { global, byVendor };
   }, [filteredOptions]);
 
-  const getVendorName = (vendorId: string) => {
-    return DEVICE_VENDORS.find((v) => v.value === vendorId)?.label || vendorId;
-  };
+  const vendorOptions = getVendorSelectOptions();
 
   const handleEdit = (option: DhcpOption) => {
     setEditingOption(option);
@@ -168,11 +165,11 @@ export function DhcpOptionsScreen() {
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Option name is required');
+      showError('Option name is required');
       return;
     }
     if (formData.option_number < 1 || formData.option_number > 255) {
-      Alert.alert('Error', 'Option number must be between 1 and 255');
+      showError('Option number must be between 1 and 255');
       return;
     }
 
@@ -197,20 +194,13 @@ export function DhcpOptionsScreen() {
   };
 
   const handleDelete = (option: DhcpOption) => {
-    Alert.alert(
-      'Delete DHCP Option',
-      `Are you sure you want to delete "${option.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteOption(option.id);
-          },
-        },
-      ]
-    );
+    confirmDelete({
+      itemName: option.name,
+      itemType: 'DHCP option',
+      onConfirm: async () => {
+        await deleteOption(option.id);
+      },
+    });
   };
 
   const handleToggle = async (id: string) => {
@@ -221,27 +211,19 @@ export function DhcpOptionsScreen() {
   };
 
   const handleReset = () => {
-    Alert.alert(
-      'Reset DHCP Options',
-      'Reset all DHCP options to defaults?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            // Delete all existing options
-            for (const option of options) {
-              await deleteOption(option.id);
-            }
-            // Create default options
-            for (const option of DEFAULT_OPTIONS) {
-              await createOption(option);
-            }
-          },
-        },
-      ]
-    );
+    confirmReset({
+      message: 'Reset all DHCP options to defaults? This cannot be undone.',
+      onConfirm: async () => {
+        // Delete all existing options
+        for (const option of options) {
+          await deleteOption(option.id);
+        }
+        // Create default options
+        for (const option of DEFAULT_OPTIONS) {
+          await createOption(option);
+        }
+      },
+    });
   };
 
   const renderOption = ({ item }: { item: DhcpOption }) => (
@@ -251,11 +233,9 @@ export function DhcpOptionsScreen() {
           <Text style={styles.optionNumber}>Option {item.option_number}</Text>
           <Text style={styles.optionName}>{item.name}</Text>
         </View>
-        <Switch
+        <ThemedSwitch
           value={item.enabled}
           onValueChange={() => handleToggle(item.id)}
-          trackColor={{ false: '#333', true: 'rgba(74, 158, 255, 0.5)' }}
-          thumbColor={item.enabled ? '#4a9eff' : '#888'}
         />
       </View>
       <View style={styles.optionDetails}>
@@ -269,10 +249,10 @@ export function DhcpOptionsScreen() {
       {item.description && (
         <Text style={styles.description}>{item.description}</Text>
       )}
-      <View style={styles.optionActions}>
-        <IconButton icon="edit" onPress={() => handleEdit(item)} />
-        <IconButton icon="delete" onPress={() => handleDelete(item)} />
-      </View>
+      <CardActions
+        onEdit={() => handleEdit(item)}
+        onDelete={() => handleDelete(item)}
+      />
     </Card>
   );
 
@@ -284,21 +264,11 @@ export function DhcpOptionsScreen() {
   );
 
   if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4a9eff" />
-        <Text style={styles.loadingText}>Loading DHCP options...</Text>
-      </View>
-    );
+    return <LoadingState message="Loading DHCP options..." />;
   }
 
   if (error) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>{error}</Text>
-        <Button title="Retry" onPress={() => {}} variant="secondary" />
-      </View>
-    );
+    return <ErrorState message={error} />;
   }
 
   return (
@@ -319,7 +289,7 @@ export function DhcpOptionsScreen() {
             dropdownIconColor="#4a9eff"
           >
             <Picker.Item label="All Vendors" value="" />
-            {DEVICE_VENDORS.filter((v) => v.value !== '').map((v) => (
+            {vendorOptions.filter((v) => v.value !== '').map((v) => (
               <Picker.Item key={v.value} label={v.label} value={v.value} />
             ))}
           </Picker>
@@ -364,127 +334,90 @@ export function DhcpOptionsScreen() {
       </ScrollView>
 
       {/* Form Modal */}
-      <Modal
+      <FormModal
         visible={showForm}
-        animationType="slide"
-        transparent
-        onRequestClose={handleCloseForm}
+        onClose={handleCloseForm}
+        onSubmit={handleSubmit}
+        title="DHCP Option"
+        isEditing={!!editingOption}
+        size="large"
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={handleCloseForm} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingOption ? 'Edit DHCP Option' : 'Add DHCP Option'}
-              </Text>
-              <Pressable onPress={handleCloseForm}>
-                <Text style={styles.closeButton}>✕</Text>
-              </Pressable>
-            </View>
+        <View style={styles.formRow}>
+          <View style={[styles.formGroup, { flex: 1 }]}>
+            <FormInput
+              label="Option Number *"
+              value={formData.option_number.toString()}
+              onChangeText={(text) =>
+                setFormData((prev) => ({ ...prev, option_number: parseInt(text, 10) || 0 }))
+              }
+              placeholder="66"
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={[styles.formGroup, { flex: 2 }]}>
+            <FormInput
+              label="Name *"
+              value={formData.name}
+              onChangeText={(text) => setFormData((prev) => ({ ...prev, name: text }))}
+              placeholder="TFTP Server"
+            />
+          </View>
+        </View>
 
-            <ScrollView style={styles.formScroll} keyboardShouldPersistTaps="handled">
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Option Number *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.option_number.toString()}
-                    onChangeText={(text) =>
-                      setFormData((prev) => ({ ...prev, option_number: parseInt(text, 10) || 0 }))
-                    }
-                    placeholder="66"
-                    placeholderTextColor="#666"
-                    keyboardType="number-pad"
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 2 }]}>
-                  <Text style={styles.label}>Name *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.name}
-                    onChangeText={(text) => setFormData((prev) => ({ ...prev, name: text }))}
-                    placeholder="TFTP Server"
-                    placeholderTextColor="#666"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Type</Text>
-                  <View style={styles.pickerWrapper}>
-                    <Picker
-                      selectedValue={formData.type}
-                      onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value }))}
-                      style={styles.formPicker}
-                    >
-                      {OPTION_TYPES.map((t) => (
-                        <Picker.Item key={t.value} label={t.label} value={t.value} />
-                      ))}
-                    </Picker>
-                  </View>
-                </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>Vendor</Text>
-                  <View style={styles.pickerWrapper}>
-                    <Picker
-                      selectedValue={formData.vendor_id}
-                      onValueChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
-                      style={styles.formPicker}
-                    >
-                      <Picker.Item label="All Vendors" value="" />
-                      {DEVICE_VENDORS.filter((v) => v.value !== '').map((v) => (
-                        <Picker.Item key={v.value} label={v.label} value={v.value} />
-                      ))}
-                    </Picker>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Value</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.value}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, value: text }))}
-                  placeholder="192.168.1.100 or ${tftp_server_ip}"
-                  placeholderTextColor="#666"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.description}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, description: text }))}
-                  placeholder="Optional description"
-                  placeholderTextColor="#666"
-                />
-              </View>
-
-              <View style={styles.switchRow}>
-                <Text style={styles.label}>Enabled</Text>
-                <Switch
-                  value={formData.enabled}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, enabled: value }))}
-                  trackColor={{ false: '#333', true: 'rgba(74, 158, 255, 0.5)' }}
-                  thumbColor={formData.enabled ? '#4a9eff' : '#888'}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <Button title="Cancel" onPress={handleCloseForm} variant="secondary" />
-              <Button title={editingOption ? 'Update' : 'Add'} onPress={handleSubmit} />
+        <View style={styles.formRow}>
+          <View style={[styles.formGroup, { flex: 1 }]}>
+            <Text style={styles.label}>Type</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={formData.type}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value }))}
+                style={styles.formPicker}
+              >
+                {OPTION_TYPES.map((t) => (
+                  <Picker.Item key={t.value} label={t.label} value={t.value} />
+                ))}
+              </Picker>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <View style={[styles.formGroup, { flex: 1 }]}>
+            <Text style={styles.label}>Vendor</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={formData.vendor_id}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
+                style={styles.formPicker}
+              >
+                <Picker.Item label="All Vendors" value="" />
+                {vendorOptions.filter((v) => v.value !== '').map((v) => (
+                  <Picker.Item key={v.value} label={v.label} value={v.value} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+        </View>
+
+        <FormInput
+          label="Value"
+          value={formData.value}
+          onChangeText={(text) => setFormData((prev) => ({ ...prev, value: text }))}
+          placeholder="192.168.1.100 or ${tftp_server_ip}"
+        />
+
+        <FormInput
+          label="Description"
+          value={formData.description}
+          onChangeText={(text) => setFormData((prev) => ({ ...prev, description: text }))}
+          placeholder="Optional description"
+        />
+
+        <View style={styles.switchRow}>
+          <Text style={styles.label}>Enabled</Text>
+          <ThemedSwitch
+            value={formData.enabled}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, enabled: value }))}
+          />
+        </View>
+      </FormModal>
     </View>
   );
 }
@@ -493,18 +426,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f0f1a',
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#888',
-    marginTop: 12,
-  },
-  errorText: {
-    color: '#ff6b6b',
-    marginBottom: 12,
   },
   actions: {
     flexDirection: 'row',
@@ -614,47 +535,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
-  optionActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    flex: 1,
-  },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  closeButton: {
-    fontSize: 20,
-    color: '#888',
-    padding: 4,
-  },
-  formScroll: {
-    padding: 16,
-  },
   formRow: {
     flexDirection: 'row',
     gap: 12,
@@ -667,15 +547,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 8,
   },
-  input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
   formPicker: {
     color: '#fff',
     height: 44,
@@ -685,12 +556,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
 });

@@ -3,18 +3,31 @@ import type { Device } from '../core';
 import { StatusBadge } from './StatusBadge';
 import { InfoRow } from './InfoRow';
 import { Button } from './Button';
+import { useAppTheme } from '../context';
 
 interface Props {
   device: Device;
   onPress: () => void;
   onDelete: () => void;
+  onActions?: () => void;
 }
 
-export function DeviceCard({ device, onPress, onDelete }: Props) {
+export function DeviceCard({ device, onPress, onDelete, onActions }: Props) {
+  const { colors } = useAppTheme();
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.bgCard,
+          borderColor: colors.border,
+        },
+      ]}
+      onPress={onPress}
+    >
       <View style={styles.header}>
-        <Text style={styles.hostname}>{device.hostname}</Text>
+        <Text style={[styles.hostname, { color: colors.textPrimary }]}>{device.hostname}</Text>
         <StatusBadge status={device.status} />
       </View>
 
@@ -25,7 +38,16 @@ export function DeviceCard({ device, onPress, onDelete }: Props) {
       )}
       <InfoRow label="Template" value={device.config_template} />
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { borderTopColor: colors.border }]}>
+        {onActions && (
+          <Button
+            title="Actions"
+            variant="secondary"
+            size="sm"
+            onPress={onActions}
+            icon="more-horiz"
+          />
+        )}
         <Button
           title="Delete"
           variant="danger"
@@ -39,13 +61,11 @@ export function DeviceCard({ device, onPress, onDelete }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a2e',
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
   },
   header: {
     flexDirection: 'row',
@@ -56,14 +76,13 @@ const styles = StyleSheet.create({
   hostname: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 8,
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#2a2a4e',
   },
 });

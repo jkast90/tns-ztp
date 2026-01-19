@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import type { RootStackParamList, ScanField } from '../navigation/types';
+import { useAppTheme } from '../context';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Scanner'>;
 type ScannerRouteProp = RouteProp<RootStackParamList, 'Scanner'>;
@@ -20,9 +21,15 @@ const FIELD_LABELS: Record<ScanField, { title: string; prompt: string; button: s
     prompt: 'Use "%s" as the MAC address?',
     button: 'Use MAC',
   },
+  model: {
+    title: 'Model Scanned',
+    prompt: 'Use "%s" as the model?',
+    button: 'Use Model',
+  },
 };
 
 export function ScannerScreen() {
+  const { colors } = useAppTheme();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<ScannerRouteProp>();
   const [permission, requestPermission] = useCameraPermissions();
@@ -81,7 +88,7 @@ export function ScannerScreen() {
   if (!permission) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Requesting camera permission...</Text>
+        <Text style={[styles.message, { color: colors.textPrimary }]}>Requesting camera permission...</Text>
       </View>
     );
   }
@@ -89,21 +96,21 @@ export function ScannerScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>Camera permission required</Text>
-        <Text style={styles.submessage}>
+        <Text style={[styles.message, { color: colors.textPrimary }]}>Camera permission required</Text>
+        <Text style={[styles.submessage, { color: colors.textMuted }]}>
           Please enable camera access to scan barcodes.
         </Text>
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { backgroundColor: colors.accentBlue }]}
           onPress={requestPermission}
         >
-          <Text style={styles.buttonText}>Grant Permission</Text>
+          <Text style={[styles.buttonText, { color: colors.textPrimary }]}>Grant Permission</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
+          style={[styles.button, { backgroundColor: colors.bgCard }]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.buttonText}>Go Back</Text>
+          <Text style={[styles.buttonText, { color: colors.textPrimary }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -130,10 +137,10 @@ export function ScannerScreen() {
         <View style={styles.middleContainer}>
           <View style={styles.unfocusedContainer} />
           <View style={styles.focusedContainer}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
+            <View style={[styles.corner, styles.topLeft, { borderColor: colors.accentBlue }]} />
+            <View style={[styles.corner, styles.topRight, { borderColor: colors.accentBlue }]} />
+            <View style={[styles.corner, styles.bottomLeft, { borderColor: colors.accentBlue }]} />
+            <View style={[styles.corner, styles.bottomRight, { borderColor: colors.accentBlue }]} />
           </View>
           <View style={styles.unfocusedContainer} />
         </View>
@@ -141,14 +148,14 @@ export function ScannerScreen() {
       </View>
 
       <View style={styles.instructionContainer}>
-        <Text style={styles.instruction}>{instructionText}</Text>
+        <Text style={[styles.instruction, { color: colors.textPrimary }]}>{instructionText}</Text>
       </View>
 
       <TouchableOpacity
-        style={styles.cancelButton}
+        style={[styles.cancelButton, { backgroundColor: colors.overlayLight }]}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.cancelButtonText}>Cancel</Text>
+        <Text style={[styles.cancelButtonText, { color: colors.textPrimary }]}>Cancel</Text>
       </TouchableOpacity>
     </View>
   );
@@ -162,30 +169,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   message: {
-    color: '#fff',
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 8,
   },
   submessage: {
-    color: '#888',
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 32,
     marginBottom: 24,
   },
   button: {
-    backgroundColor: '#4a9eff',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginBottom: 12,
   },
-  secondaryButton: {
-    backgroundColor: '#2a2a4e',
-  },
   buttonText: {
-    color: '#fff',
     fontWeight: '600',
   },
   overlay: {
@@ -208,7 +208,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 40,
     height: 40,
-    borderColor: '#4a9eff',
   },
   topLeft: {
     top: 0,
@@ -242,20 +241,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   instruction: {
-    color: '#fff',
     fontSize: 16,
     textAlign: 'center',
   },
   cancelButton: {
     position: 'absolute',
     bottom: 50,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 8,
   },
   cancelButtonText: {
-    color: '#fff',
     fontWeight: '600',
     fontSize: 16,
   },

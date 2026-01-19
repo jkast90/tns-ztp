@@ -11,22 +11,30 @@ import (
 	"github.com/ztp-server/backend/models"
 )
 
+// LeaseCallback is a function called when a new lease is detected
+type LeaseCallback func(lease *models.Lease)
+
 // LeaseWatcher monitors the dnsmasq lease file for changes
 type LeaseWatcher struct {
-	leasePath  string
-	onNewLease func(lease *models.Lease)
-	stopCh     chan struct{}
-	knownMACs  map[string]int64 // MAC -> expiry time
+	leasePath string
+	callbacks []LeaseCallback
+	stopCh    chan struct{}
+	knownMACs map[string]int64 // MAC -> expiry time
 }
 
 // NewLeaseWatcher creates a new lease watcher
-func NewLeaseWatcher(leasePath string, callback func(lease *models.Lease)) *LeaseWatcher {
+func NewLeaseWatcher(leasePath string, callbacks ...LeaseCallback) *LeaseWatcher {
 	return &LeaseWatcher{
-		leasePath:  leasePath,
-		onNewLease: callback,
-		stopCh:     make(chan struct{}),
-		knownMACs:  make(map[string]int64),
+		leasePath: leasePath,
+		callbacks: callbacks,
+		stopCh:    make(chan struct{}),
+		knownMACs: make(map[string]int64),
 	}
+}
+
+// AddCallback adds a new callback to be notified on lease changes
+func (w *LeaseWatcher) AddCallback(callback LeaseCallback) {
+	w.callbacks = append(w.callbacks, callback)
 }
 
 // Start begins watching the lease file
@@ -37,6 +45,13 @@ func (w *LeaseWatcher) Start() {
 // Stop stops watching the lease file
 func (w *LeaseWatcher) Stop() {
 	close(w.stopCh)
+}
+
+// ClearKnownMACs resets the known MACs and immediately re-checks leases to trigger notifications
+func (w *LeaseWatcher) ClearKnownMACs() {
+	w.knownMACs = make(map[string]int64)
+	// Immediately check leases to trigger notifications for all current devices
+	w.checkLeases()
 }
 
 func (w *LeaseWatcher) watch() {
@@ -67,8 +82,11 @@ func (w *LeaseWatcher) checkLeases() {
 		prevExpiry, known := w.knownMACs[lease.MAC]
 		if !known || lease.ExpiryTime > prevExpiry {
 			w.knownMACs[lease.MAC] = lease.ExpiryTime
-			if w.onNewLease != nil {
-				w.onNewLease(lease)
+			// Notify all callbacks
+			for _, callback := range w.callbacks {
+				if callback != nil {
+					callback(lease)
+				}
 			}
 		}
 	}

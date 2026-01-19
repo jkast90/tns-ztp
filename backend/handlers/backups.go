@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/ztp-server/backend/db"
 	"github.com/ztp-server/backend/models"
@@ -14,13 +17,15 @@ type BackupTrigger func(mac string) error
 type BackupHandler struct {
 	store         *db.Store
 	backupTrigger BackupTrigger
+	backupDir     string
 }
 
 // NewBackupHandler creates a new backup handler
-func NewBackupHandler(store *db.Store, trigger BackupTrigger) *BackupHandler {
+func NewBackupHandler(store *db.Store, trigger BackupTrigger, backupDir string) *BackupHandler {
 	return &BackupHandler{
 		store:         store,
 		backupTrigger: trigger,
+		backupDir:     backupDir,
 	}
 }
 
@@ -28,6 +33,7 @@ func NewBackupHandler(store *db.Store, trigger BackupTrigger) *BackupHandler {
 func (h *BackupHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/devices/:mac/backup", h.TriggerBackup)
 	r.GET("/devices/:mac/backups", h.ListBackups)
+	r.GET("/backups/:id", h.GetBackup)
 }
 
 // TriggerBackup initiates a manual backup for a device
@@ -72,6 +78,46 @@ func (h *BackupHandler) ListBackups(c *gin.Context) {
 	}
 
 	ok(c, backups)
+}
+
+// GetBackup returns the content of a specific backup file
+func (h *BackupHandler) GetBackup(c *gin.Context) {
+	id := c.Param("id")
+
+	backup, err := h.store.GetBackup(id)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+
+	if backup == nil {
+		notFound(c, "backup")
+		return
+	}
+
+	// Read backup file content
+	filePath := filepath.Join(h.backupDir, backup.Filename)
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			ok(c, gin.H{
+				"id":       backup.ID,
+				"filename": backup.Filename,
+				"content":  "",
+				"exists":   false,
+			})
+			return
+		}
+		internalError(c, err)
+		return
+	}
+
+	ok(c, gin.H{
+		"id":       backup.ID,
+		"filename": backup.Filename,
+		"content":  string(content),
+		"exists":   true,
+	})
 }
 
 // requireDevice checks if a device exists and returns it, or sends an error response

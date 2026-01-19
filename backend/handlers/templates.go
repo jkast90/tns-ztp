@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bytes"
+	"regexp"
+	"strings"
 	"text/template"
 
 	"github.com/gin-gonic/gin"
@@ -26,8 +28,9 @@ func NewTemplateHandler(store *db.Store, configReload func() error) *TemplateHan
 // RegisterRoutes registers all template routes
 func (h *TemplateHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/templates", h.List)
-	// Static route for variables must come before parameterized routes
+	// Static routes for special endpoints must come before parameterized routes
 	r.GET("/templates/_/variables", h.GetVariables)
+	r.POST("/templates/_/templatize", h.Templatize)
 	r.GET("/templates/:id", h.Get)
 	r.POST("/templates", h.Create)
 	r.PUT("/templates/:id", h.Update)
@@ -42,12 +45,7 @@ func (h *TemplateHandler) List(c *gin.Context) {
 		internalError(c, err)
 		return
 	}
-
-	if templates == nil {
-		templates = []models.Template{}
-	}
-
-	ok(c, templates)
+	okList(c, templates)
 }
 
 // Get returns a single template by ID
@@ -230,4 +228,193 @@ func (h *TemplateHandler) triggerReload() {
 	if h.configReload != nil {
 		go h.configReload()
 	}
+}
+
+// DetectedVariable represents a detected variable in config text
+type DetectedVariable struct {
+	Name        string `json:"name"`
+	Value       string `json:"value"`
+	Type        string `json:"type"`
+	StartIndex  int    `json:"start_index"`
+	EndIndex    int    `json:"end_index"`
+	Description string `json:"description"`
+}
+
+// TemplatizeRequest is the request body for templatize endpoint
+type TemplatizeRequest struct {
+	Content   string             `json:"content"`
+	Variables []DetectedVariable `json:"variables,omitempty"`
+}
+
+// TemplatizeResponse is the response from templatize endpoint
+type TemplatizeResponse struct {
+	DetectedVariables []DetectedVariable `json:"detected_variables"`
+	TemplateContent   string             `json:"template_content"`
+}
+
+// Variable detection patterns
+var (
+	ipv4Pattern     = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`)
+	macPattern      = regexp.MustCompile(`\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b`)
+	hostnamePattern = regexp.MustCompile(`\bhostname\s+([a-zA-Z][a-zA-Z0-9_-]*)\b`)
+	subnetPattern   = regexp.MustCompile(`\b255\.(?:255|254|252|248|240|224|192|128|0)\.(?:255|254|252|248|240|224|192|128|0)\.(?:255|254|252|248|240|224|192|128|0)\b`)
+)
+
+// Templatize analyzes config text and detects/replaces variables
+func (h *TemplateHandler) Templatize(c *gin.Context) {
+	var req TemplatizeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		badRequest(c, err)
+		return
+	}
+
+	if req.Content == "" {
+		errorResponse(c, 400, "content is required")
+		return
+	}
+
+	// If variables are provided, apply them to create template
+	if len(req.Variables) > 0 {
+		templateContent := applyVariables(req.Content, req.Variables)
+		ok(c, TemplatizeResponse{
+			DetectedVariables: req.Variables,
+			TemplateContent:   templateContent,
+		})
+		return
+	}
+
+	// Otherwise, detect variables in the content
+	detected := detectVariables(req.Content)
+
+	ok(c, TemplatizeResponse{
+		DetectedVariables: detected,
+		TemplateContent:   req.Content, // Original content until user confirms variables
+	})
+}
+
+// detectVariables scans content for common variable patterns
+func detectVariables(content string) []DetectedVariable {
+	var detected []DetectedVariable
+	seen := make(map[string]bool) // Track seen values to avoid duplicates
+
+	// Detect hostnames (from "hostname <name>" commands)
+	for _, match := range hostnamePattern.FindAllStringSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			value := content[match[2]:match[3]]
+			if !seen[value] {
+				seen[value] = true
+				detected = append(detected, DetectedVariable{
+					Name:        "Hostname",
+					Value:       value,
+					Type:        "hostname",
+					StartIndex:  match[2],
+					EndIndex:    match[3],
+					Description: "Device hostname",
+				})
+			}
+		}
+	}
+
+	// Detect subnet masks (must come before general IPs to avoid false positives)
+	for _, match := range subnetPattern.FindAllStringIndex(content, -1) {
+		value := content[match[0]:match[1]]
+		if !seen[value] {
+			seen[value] = true
+			detected = append(detected, DetectedVariable{
+				Name:        "Subnet",
+				Value:       value,
+				Type:        "subnet",
+				StartIndex:  match[0],
+				EndIndex:    match[1],
+				Description: "Subnet mask",
+			})
+		}
+	}
+
+	// Detect IP addresses
+	for _, match := range ipv4Pattern.FindAllStringIndex(content, -1) {
+		value := content[match[0]:match[1]]
+		// Skip if already detected as subnet
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+
+		// Try to determine IP type based on context
+		varType := "ip"
+		varName := "IP"
+		description := "IP address"
+
+		// Check surrounding context for clues
+		start := match[0] - 50
+		if start < 0 {
+			start = 0
+		}
+		end := match[1] + 50
+		if end > len(content) {
+			end = len(content)
+		}
+		context := strings.ToLower(content[start:end])
+
+		if strings.Contains(context, "gateway") || strings.Contains(context, "default-gateway") {
+			varName = "Gateway"
+			varType = "gateway"
+			description = "Default gateway"
+		} else if strings.Contains(context, "tftp") || strings.Contains(context, "server") {
+			varName = "TFTPServer"
+			varType = "server"
+			description = "TFTP/config server"
+		}
+
+		detected = append(detected, DetectedVariable{
+			Name:        varName,
+			Value:       value,
+			Type:        varType,
+			StartIndex:  match[0],
+			EndIndex:    match[1],
+			Description: description,
+		})
+	}
+
+	// Detect MAC addresses
+	for _, match := range macPattern.FindAllStringIndex(content, -1) {
+		value := content[match[0]:match[1]]
+		if !seen[value] {
+			seen[value] = true
+			detected = append(detected, DetectedVariable{
+				Name:        "MAC",
+				Value:       value,
+				Type:        "mac",
+				StartIndex:  match[0],
+				EndIndex:    match[1],
+				Description: "MAC address",
+			})
+		}
+	}
+
+	return detected
+}
+
+// applyVariables replaces detected values with template variables
+func applyVariables(content string, variables []DetectedVariable) string {
+	// Sort variables by start index in reverse order so replacements don't affect indices
+	// We'll use a simple approach: replace values directly
+	result := content
+
+	// Group variables by value to handle multiple occurrences
+	valueToVar := make(map[string]string)
+	for _, v := range variables {
+		if v.Name != "" {
+			valueToVar[v.Value] = v.Name
+		}
+	}
+
+	// Replace each unique value with its template variable
+	for value, varName := range valueToVar {
+		// Use {{.VarName}} syntax for Go templates
+		replacement := "{{." + varName + "}}"
+		result = strings.ReplaceAll(result, value, replacement)
+	}
+
+	return result
 }

@@ -1,4 +1,5 @@
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useAppTheme } from '../context';
 
 interface Props {
   message?: string;
@@ -6,10 +7,12 @@ interface Props {
 }
 
 export function LoadingState({ message = 'Loading...', size = 'large' }: Props) {
+  const { colors } = useAppTheme();
+
   return (
     <View style={styles.container}>
-      <ActivityIndicator size={size} color="#4a9eff" />
-      <Text style={styles.message}>{message}</Text>
+      <ActivityIndicator size={size} color={colors.accentBlue} />
+      <Text style={[styles.message, { color: colors.textMuted }]}>{message}</Text>
     </View>
   );
 }
@@ -22,7 +25,6 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   message: {
-    color: '#888',
     marginTop: 12,
   },
 });

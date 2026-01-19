@@ -8,6 +8,10 @@ export class DhcpOptionService extends BaseService {
     return this.get<DhcpOption[]>('/dhcp-options');
   }
 
+  async listDefaults(): Promise<DhcpOption[]> {
+    return this.get<DhcpOption[]>('/dhcp-options/defaults');
+  }
+
   async getById(id: string): Promise<DhcpOption> {
     return this.get<DhcpOption>(`/dhcp-options/${encodeURIComponent(id)}`);
   }

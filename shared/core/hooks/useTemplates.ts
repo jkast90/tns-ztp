@@ -1,8 +1,9 @@
-// Template management hook
+// Template management hook - uses generic useCrud for CRUD operations
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Template, TemplateVariable } from '../types';
 import { getServices } from '../services';
+import { useCrud, type UseCrudOptions } from './useCrud';
 
 export interface UseTemplatesOptions {
   vendorFilter?: string;
@@ -34,95 +35,55 @@ export interface UseTemplatesReturn {
 
 export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesReturn {
   const { vendorFilter } = options;
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [variables, setVariables] = useState<TemplateVariable[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const clearMessage = useCallback(() => setMessage(null), []);
+  const services = useMemo(() => getServices(), []);
 
-  const fetchTemplates = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const services = getServices();
-      const data = await services.templates.list();
-
-      // Apply client-side vendor filter if specified
-      let filtered = data;
-      if (vendorFilter && vendorFilter !== 'all') {
-        filtered = data.filter(t => !t.vendor_id || t.vendor_id === vendorFilter);
-      }
-
-      setTemplates(filtered);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch templates';
-      setError(errorMessage);
-      setTemplates([]);
-    } finally {
-      setLoading(false);
+  // Filter function for vendor filtering
+  const filterFn = useCallback((items: Template[]) => {
+    if (!vendorFilter || vendorFilter === 'all') {
+      return items;
     }
+    return items.filter(t => !t.vendor_id || t.vendor_id === vendorFilter);
   }, [vendorFilter]);
 
+  const crudOptions: UseCrudOptions<Template> = useMemo(() => ({
+    filter: filterFn,
+  }), [filterFn]);
+
+  const {
+    filteredItems: templates,
+    loading,
+    error,
+    message,
+    clearMessage,
+    create: createTemplate,
+    update: updateTemplate,
+    remove: deleteTemplate,
+    refresh,
+    setMessage,
+  } = useCrud({
+    service: services.templates,
+    labels: { singular: 'template', plural: 'templates' },
+    options: crudOptions,
+  });
+
+  // Fetch variables separately (not part of CRUD)
   const fetchVariables = useCallback(async () => {
     try {
-      const services = getServices();
       const data = await services.templates.getVariables();
       setVariables(data);
     } catch (err) {
       console.error('Failed to fetch template variables:', err);
       setVariables([]);
     }
-  }, []);
+  }, [services.templates]);
 
   useEffect(() => {
-    fetchTemplates();
     fetchVariables();
-  }, [fetchTemplates, fetchVariables]);
+  }, [fetchVariables]);
 
-  const createTemplate = useCallback(async (template: Partial<Template>): Promise<boolean> => {
-    try {
-      const services = getServices();
-      await services.templates.create(template);
-      setMessage({ type: 'success', text: 'Template created successfully' });
-      await fetchTemplates();
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create template';
-      setMessage({ type: 'error', text: errorMessage });
-      return false;
-    }
-  }, [fetchTemplates]);
-
-  const updateTemplate = useCallback(async (id: string, template: Partial<Template>): Promise<boolean> => {
-    try {
-      const services = getServices();
-      await services.templates.update(id, template);
-      setMessage({ type: 'success', text: 'Template updated successfully' });
-      await fetchTemplates();
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update template';
-      setMessage({ type: 'error', text: errorMessage });
-      return false;
-    }
-  }, [fetchTemplates]);
-
-  const deleteTemplate = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      const services = getServices();
-      await services.templates.remove(id);
-      setMessage({ type: 'success', text: 'Template deleted successfully' });
-      await fetchTemplates();
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to delete template';
-      setMessage({ type: 'error', text: errorMessage });
-      return false;
-    }
-  }, [fetchTemplates]);
-
+  // Template-specific method: preview
   const previewTemplate = useCallback(async (id: string, data: {
     device: {
       mac: string;
@@ -135,7 +96,6 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
     gateway: string;
   }): Promise<string | null> => {
     try {
-      const services = getServices();
       const result = await services.templates.preview(id, data);
       return result.output;
     } catch (err) {
@@ -143,7 +103,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
       setMessage({ type: 'error', text: errorMessage });
       return null;
     }
-  }, []);
+  }, [services.templates, setMessage]);
 
   return {
     templates,
@@ -156,6 +116,6 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
     updateTemplate,
     deleteTemplate,
     previewTemplate,
-    refresh: fetchTemplates,
+    refresh,
   };
 }

@@ -8,6 +8,10 @@ export class VendorService extends BaseService {
     return this.get<Vendor[]>('/vendors');
   }
 
+  async listDefaults(): Promise<Vendor[]> {
+    return this.get<Vendor[]>('/vendors/defaults');
+  }
+
   async getById(id: string): Promise<Vendor> {
     return this.get<Vendor>(`/vendors/${encodeURIComponent(id)}`);
   }

@@ -8,6 +8,7 @@ type Device struct {
 	IP             string     `json:"ip"`
 	Hostname       string     `json:"hostname"`
 	Vendor         string     `json:"vendor,omitempty"`
+	Model          string     `json:"model,omitempty"`
 	SerialNumber   string     `json:"serial_number,omitempty"`
 	ConfigTemplate string     `json:"config_template"`
 	SSHUser        string     `json:"ssh_user,omitempty"`
@@ -56,13 +57,16 @@ type Lease struct {
 
 // Vendor represents a network device vendor configuration
 type Vendor struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	BackupCommand string    `json:"backup_command"`
-	SSHPort       int       `json:"ssh_port"`
-	DeviceCount   int       `json:"device_count,omitempty"` // Computed field
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	BackupCommand   string    `json:"backup_command"`
+	SSHPort         int       `json:"ssh_port"`
+	MacPrefixes     []string  `json:"mac_prefixes"`      // OUI prefixes for MAC address lookup
+	VendorClass     string    `json:"vendor_class"`      // DHCP Option 60 vendor class identifier
+	DefaultTemplate string    `json:"default_template"`  // Default template ID for this vendor
+	DeviceCount     int       `json:"device_count,omitempty"` // Computed field
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // DhcpOption represents a DHCP option configuration
@@ -89,6 +93,18 @@ type Template struct {
 	DeviceCount int       `json:"device_count,omitempty"` // Computed field
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// DiscoveryLog represents a discovery event log entry
+type DiscoveryLog struct {
+	ID        int64     `json:"id"`
+	EventType string    `json:"event_type"` // discovered, added, lease_renewed, lease_expired
+	MAC       string    `json:"mac"`
+	IP        string    `json:"ip"`
+	Hostname  string    `json:"hostname,omitempty"`
+	Vendor    string    `json:"vendor,omitempty"`
+	Message   string    `json:"message,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // DefaultSettings returns settings with sensible defaults

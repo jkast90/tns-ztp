@@ -1,5 +1,6 @@
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../context';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -27,16 +28,66 @@ export function Button({
   textStyle,
   icon,
 }: Props) {
+  const { colors } = useAppTheme();
   const isDisabled = disabled || loading;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 20 : 16;
-  const iconColor = variant === 'primary' ? '#fff' : variant === 'danger' ? '#ff5252' : '#888';
+
+  const getButtonStyle = () => {
+    switch (variant) {
+      case 'primary':
+        return { backgroundColor: colors.accentBlue };
+      case 'secondary':
+        return { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border };
+      case 'danger':
+        return { backgroundColor: colors.errorBg };
+      case 'ghost':
+        return { backgroundColor: 'transparent' };
+    }
+  };
+
+  const getTextColor = () => {
+    switch (variant) {
+      case 'primary':
+        return '#fff';
+      case 'secondary':
+        return colors.textSecondary;
+      case 'danger':
+        return colors.error;
+      case 'ghost':
+        return colors.accentBlue;
+    }
+  };
+
+  const getSizeStyle = () => {
+    switch (size) {
+      case 'sm':
+        return { paddingHorizontal: 12, paddingVertical: 8 };
+      case 'lg':
+        return { paddingHorizontal: 24, paddingVertical: 14 };
+      default:
+        return { paddingHorizontal: 16, paddingVertical: 12 };
+    }
+  };
+
+  const getFontSize = () => {
+    switch (size) {
+      case 'sm':
+        return 13;
+      case 'lg':
+        return 16;
+      default:
+        return 14;
+    }
+  };
+
+  const textColor = getTextColor();
 
   return (
     <TouchableOpacity
       style={[
         styles.button,
-        styles[`button_${variant}`],
-        styles[`button_${size}`],
+        getButtonStyle(),
+        getSizeStyle(),
         isDisabled && styles.button_disabled,
         style,
       ]}
@@ -45,27 +96,17 @@ export function Button({
       activeOpacity={0.7}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'primary' ? '#fff' : '#888'}
-        />
+        <ActivityIndicator size="small" color={variant === 'primary' ? '#fff' : colors.textMuted} />
       ) : (
         <View style={styles.content}>
           {icon && (
             <MaterialIcons
               name={icon as keyof typeof MaterialIcons.glyphMap}
               size={iconSize}
-              color={iconColor}
+              color={textColor}
             />
           )}
-          <Text
-            style={[
-              styles.text,
-              styles[`text_${variant}`],
-              styles[`text_${size}`],
-              textStyle,
-            ]}
-          >
+          <Text style={[styles.text, { color: textColor, fontSize: getFontSize() }, textStyle]}>
             {title}
           </Text>
         </View>
@@ -86,55 +127,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  button_primary: {
-    backgroundColor: '#4a9eff',
-  },
-  button_secondary: {
-    backgroundColor: '#2a2a4e',
-  },
-  button_danger: {
-    backgroundColor: 'rgba(255, 82, 82, 0.2)',
-  },
-  button_ghost: {
-    backgroundColor: 'transparent',
-  },
-  button_sm: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  button_md: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  button_lg: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-  },
   button_disabled: {
     opacity: 0.6,
   },
   text: {
     fontWeight: '600',
-  },
-  text_primary: {
-    color: '#fff',
-  },
-  text_secondary: {
-    color: '#888',
-  },
-  text_danger: {
-    color: '#ff5252',
-  },
-  text_ghost: {
-    color: '#4a9eff',
-  },
-  text_sm: {
-    fontSize: 13,
-  },
-  text_md: {
-    fontSize: 14,
-  },
-  text_lg: {
-    fontSize: 16,
   },
 });

@@ -49,9 +49,25 @@ dhcp-option=option:router,{{.Settings.DHCPGateway}}
 enable-tftp
 tftp-root=/tftp
 
-# Boot options for ZTP
-dhcp-option=66,{{.Settings.TFTPServerIP}}
-dhcp-boot=config.cfg,ztp-server,{{.Settings.TFTPServerIP}}
+# Global DHCP Options (apply to all clients)
+{{range .GlobalOptions}}
+{{- if .Enabled}}
+dhcp-option={{.OptionNumber}},{{.Value}}
+{{- end}}
+{{end}}
+
+# Per-Device DHCP Options (vendor-specific based on device's vendor assignment)
+{{range .Devices}}
+{{- $vendor := .Vendor}}
+{{- $mac := .MAC}}
+{{- range $.VendorOptions}}
+{{- if eq .VendorID $vendor}}
+{{- if .Enabled}}
+dhcp-option=tag:{{$mac}},{{.OptionNumber}},{{.Value}}
+{{- end}}
+{{- end}}
+{{- end}}
+{{end}}
 
 # OpenGear ZTP Enrollment Options (vendor-specific options 1-3)
 {{if .Settings.OpenGearEnrollURL}}
@@ -71,9 +87,13 @@ dhcp-leasefile=/var/lib/misc/dnsmasq.leases
 log-dhcp
 log-queries
 
-# Static DHCP reservations
+# Static DHCP reservations with vendor tags
 {{range .Devices}}
+{{- if .Vendor}}
+dhcp-host={{.MAC}},set:{{.MAC}},{{.IP}},{{.Hostname}}
+{{- else}}
 dhcp-host={{.MAC}},{{.IP}},{{.Hostname}}
+{{- end}}
 {{end}}
 `
 
@@ -139,6 +159,28 @@ func (m *ConfigManager) generateDnsmasqConfig(devices []models.Device, settings 
 		return err
 	}
 
+	// Get DHCP options from database
+	dhcpOptions, err := m.store.ListDhcpOptions()
+	if err != nil {
+		return fmt.Errorf("failed to list DHCP options: %w", err)
+	}
+
+	// Separate global options from vendor-specific options
+	var globalOptions []models.DhcpOption
+	vendorOptions := make(map[string][]models.DhcpOption)
+
+	for _, opt := range dhcpOptions {
+		// Substitute variables in the value
+		value := m.substituteOptionVariables(opt.Value, settings)
+		opt.Value = value
+
+		if opt.VendorID == "" {
+			globalOptions = append(globalOptions, opt)
+		} else {
+			vendorOptions[opt.VendorID] = append(vendorOptions[opt.VendorID], opt)
+		}
+	}
+
 	file, err := os.Create(m.configPath)
 	if err != nil {
 		return err
@@ -146,16 +188,27 @@ func (m *ConfigManager) generateDnsmasqConfig(devices []models.Device, settings 
 	defer file.Close()
 
 	data := struct {
-		GeneratedAt string
-		Settings    *models.Settings
-		Devices     []models.Device
+		GeneratedAt   string
+		Settings      *models.Settings
+		Devices       []models.Device
+		GlobalOptions []models.DhcpOption
+		VendorOptions map[string][]models.DhcpOption
 	}{
-		GeneratedAt: "auto",
-		Settings:    settings,
-		Devices:     devices,
+		GeneratedAt:   "auto",
+		Settings:      settings,
+		Devices:       devices,
+		GlobalOptions: globalOptions,
+		VendorOptions: vendorOptions,
 	}
 
 	return tmpl.Execute(file, data)
+}
+
+// substituteOptionVariables replaces variable placeholders in option values
+func (m *ConfigManager) substituteOptionVariables(value string, settings *models.Settings) string {
+	value = strings.ReplaceAll(value, "${tftp_server_ip}", settings.TFTPServerIP)
+	value = strings.ReplaceAll(value, "${dhcp_gateway}", settings.DHCPGateway)
+	return value
 }
 
 func (m *ConfigManager) generateDeviceConfigs(devices []models.Device, settings *models.Settings) error {
