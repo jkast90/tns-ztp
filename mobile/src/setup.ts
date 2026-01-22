@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { configureServices } from './core';
 
 const API_URL_KEY = '@ztp_api_url';
-const DEFAULT_API_URL = 'http://192.168.1.100:8080';
+const DEFAULT_API_URL = 'http://192.168.1.100:8088';
 
 // Cache to avoid repeated AsyncStorage reads
 let cachedUrl: string | null = null;

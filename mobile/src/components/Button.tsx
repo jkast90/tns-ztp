@@ -120,7 +120,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    flex: 1,
   },
   content: {
     flexDirection: 'row',

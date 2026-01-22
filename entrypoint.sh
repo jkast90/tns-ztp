@@ -1,13 +1,16 @@
 #!/bin/sh
 set -e
 
+# Default interface (can be overridden via DHCP_INTERFACE env var)
+DHCP_INTERFACE=${DHCP_INTERFACE:-eth0}
+
 # Create initial dnsmasq config if it doesn't exist
 if [ ! -f /dnsmasq/dnsmasq.conf ]; then
     echo "Creating initial dnsmasq config..."
-    cat > /dnsmasq/dnsmasq.conf << 'DNSMASQ'
+    cat > /dnsmasq/dnsmasq.conf << DNSMASQ
 # Initial ZTP Server dnsmasq config
 user=root
-interface=eth0
+interface=${DHCP_INTERFACE}
 bind-interfaces
 dhcp-range=172.30.0.100,172.30.0.200,255.255.255.0,12h
 dhcp-option=option:router,172.30.0.1

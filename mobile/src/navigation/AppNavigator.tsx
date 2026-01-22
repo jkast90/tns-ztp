@@ -87,7 +87,7 @@ function MainTabs() {
   );
 }
 
-// Config Stack for Vendors and DHCP Options
+// Config Stack for Vendors, DHCP Options, and Settings
 const ConfigStackNav = createNativeStackNavigator();
 
 function ConfigStack() {
@@ -120,6 +120,11 @@ function ConfigStack() {
         component={DhcpOptionsScreen}
         options={{ title: 'DHCP Options' }}
       />
+      <ConfigStackNav.Screen
+        name="SettingsConfig"
+        component={SettingsScreen}
+        options={{ title: 'Server Settings' }}
+      />
     </ConfigStackNav.Navigator>
   );
 }
@@ -130,6 +135,7 @@ function ConfigMenuScreen() {
   const { colors, theme, setTheme, themeOptions } = useAppTheme();
 
   const menuItems = [
+    { title: 'Server Settings', subtitle: 'API connection and server config', icon: 'settings', screen: 'SettingsConfig' },
     { title: 'Vendors', subtitle: 'Manage vendor configurations', icon: 'business', screen: 'Vendors' },
     { title: 'DHCP Options', subtitle: 'Configure DHCP options', icon: 'lan', screen: 'DhcpOptions' },
   ];

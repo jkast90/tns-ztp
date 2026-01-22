@@ -118,8 +118,13 @@ func (s *Service) performBackup(mac string) error {
 		pass = settings.DefaultSSHPass
 	}
 
-	// Determine command
+	// Determine command - use vendor-specific command if device has a vendor
 	command := settings.BackupCommand
+	if device.Vendor != "" {
+		if vendor, err := s.store.GetVendor(device.Vendor); err == nil && vendor != nil && vendor.BackupCommand != "" {
+			command = vendor.BackupCommand
+		}
+	}
 	if command == "" {
 		command = "show running-config"
 	}
@@ -140,18 +145,23 @@ func (s *Service) performBackup(mac string) error {
 	}
 
 	if lastErr != nil {
+		errMsg := fmt.Sprintf("SSH failed: %v", lastErr)
 		s.store.UpdateDeviceStatus(mac, "offline")
+		s.store.UpdateDeviceError(mac, errMsg)
 		return fmt.Errorf("all SSH attempts failed: %w", lastErr)
 	}
 
 	// Save backup
 	if err := s.saveBackup(device, config); err != nil {
+		errMsg := fmt.Sprintf("Failed to save backup: %v", err)
+		s.store.UpdateDeviceError(mac, errMsg)
 		return fmt.Errorf("failed to save backup: %w", err)
 	}
 
-	// Update device status
+	// Update device status and clear any previous error
 	s.store.UpdateDeviceStatus(mac, "online")
 	s.store.UpdateDeviceBackupTime(mac)
+	s.store.ClearDeviceError(mac)
 
 	log.Printf("Backup completed for %s", device.Hostname)
 	return nil

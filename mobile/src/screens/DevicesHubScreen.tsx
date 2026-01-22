@@ -138,10 +138,7 @@ export function DevicesHubScreen() {
         </View>
       ),
       headerRight: () => (
-        <View style={styles.headerButtons}>
-          <IconButton icon="settings" onPress={() => navigation.navigate('Settings')} />
-          <IconButton icon="add" onPress={() => navigation.navigate('DeviceForm')} />
-        </View>
+        <IconButton icon="add" onPress={() => navigation.navigate('DeviceForm')} />
       ),
     });
   }, [navigation, colors]);
@@ -352,7 +349,7 @@ export function DevicesHubScreen() {
               title="Connection Error"
               message={devicesError}
               details={`API URL: ${apiUrl}`}
-              primaryAction={{ label: 'Configure API URL', onPress: () => navigation.navigate('Settings') }}
+              primaryAction={{ label: 'Configure API URL', onPress: () => navigation.navigate('Main', { screen: 'ConfigTab', params: { screen: 'SettingsConfig' } } as never) }}
               secondaryAction={{ label: 'Retry', onPress: refreshDevices }}
             />
           );
@@ -667,10 +664,6 @@ const styles = StyleSheet.create({
   headerTitleText: {
     fontSize: 17,
     fontWeight: 'bold',
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
   },
   tabBar: {
     flexDirection: 'row',

@@ -59,6 +59,7 @@ export {
   useAsyncModal,
   useSimpleModal,
   useLocalSettings,
+  useLocalAddresses,
   getLocalApiUrl,
   setLocalApiUrl,
   THEME_OPTIONS,
@@ -98,6 +99,7 @@ export {
   type UseAsyncModalReturn,
   type LocalSettings,
   type UseLocalSettingsReturn,
+  type UseLocalAddressesReturn,
 } from './hooks';
 
 // Utils

@@ -95,6 +95,15 @@ func getDefaultVendors() []defaultVendor {
 			VendorClass:     "Juniper Networks",
 			DefaultTemplate: "juniper-junos",
 		},
+		{
+			ID:              "raspberry-pi",
+			Name:            "Raspberry Pi",
+			BackupCommand:   "cat /etc/network/interfaces",
+			SSHPort:         22,
+			MacPrefixes:     []string{"B8:27:EB", "DC:A6:32", "E4:5F:01", "D8:3A:DD", "28:CD:C1"},
+			VendorClass:     "Raspberry Pi",
+			DefaultTemplate: "raspberry-pi",
+		},
 	}
 }
 
@@ -542,6 +551,9 @@ func (s *Store) migrate() error {
 	// Migration: Add model column if it doesn't exist
 	s.db.Exec("ALTER TABLE devices ADD COLUMN model TEXT DEFAULT ''")
 
+	// Migration: Add last_error column if it doesn't exist
+	s.db.Exec("ALTER TABLE devices ADD COLUMN last_error TEXT DEFAULT ''")
+
 	// Seed default templates if they don't exist (insert or ignore)
 	defaultTemplates := getDefaultTemplates()
 	for _, t := range defaultTemplates {
@@ -600,7 +612,7 @@ func (s *Store) migrate() error {
 func (s *Store) ListDevices() ([]models.Device, error) {
 	rows, err := s.db.Query(`
 		SELECT mac, ip, hostname, vendor, model, serial_number, config_template, ssh_user, ssh_pass,
-		       status, last_seen, last_backup, created_at, updated_at
+		       status, last_seen, last_backup, last_error, created_at, updated_at
 		FROM devices ORDER BY hostname
 	`)
 	if err != nil {
@@ -612,10 +624,11 @@ func (s *Store) ListDevices() ([]models.Device, error) {
 	for rows.Next() {
 		var d models.Device
 		var lastSeen, lastBackup sql.NullTime
+		var lastError sql.NullString
 		err := rows.Scan(
 			&d.MAC, &d.IP, &d.Hostname, &d.Vendor, &d.Model, &d.SerialNumber, &d.ConfigTemplate,
 			&d.SSHUser, &d.SSHPass, &d.Status,
-			&lastSeen, &lastBackup, &d.CreatedAt, &d.UpdatedAt,
+			&lastSeen, &lastBackup, &lastError, &d.CreatedAt, &d.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -625,6 +638,9 @@ func (s *Store) ListDevices() ([]models.Device, error) {
 		}
 		if lastBackup.Valid {
 			d.LastBackup = &lastBackup.Time
+		}
+		if lastError.Valid {
+			d.LastError = lastError.String
 		}
 		devices = append(devices, d)
 	}
@@ -636,15 +652,16 @@ func (s *Store) ListDevices() ([]models.Device, error) {
 func (s *Store) GetDevice(mac string) (*models.Device, error) {
 	var d models.Device
 	var lastSeen, lastBackup sql.NullTime
+	var lastError sql.NullString
 
 	err := s.db.QueryRow(`
 		SELECT mac, ip, hostname, vendor, model, serial_number, config_template, ssh_user, ssh_pass,
-		       status, last_seen, last_backup, created_at, updated_at
+		       status, last_seen, last_backup, last_error, created_at, updated_at
 		FROM devices WHERE mac = ?
 	`, mac).Scan(
 		&d.MAC, &d.IP, &d.Hostname, &d.Vendor, &d.Model, &d.SerialNumber, &d.ConfigTemplate,
 		&d.SSHUser, &d.SSHPass, &d.Status,
-		&lastSeen, &lastBackup, &d.CreatedAt, &d.UpdatedAt,
+		&lastSeen, &lastBackup, &lastError, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -658,6 +675,9 @@ func (s *Store) GetDevice(mac string) (*models.Device, error) {
 	}
 	if lastBackup.Valid {
 		d.LastBackup = &lastBackup.Time
+	}
+	if lastError.Valid {
+		d.LastError = lastError.String
 	}
 
 	return &d, nil
@@ -731,6 +751,20 @@ func (s *Store) UpdateDeviceBackupTime(mac string) error {
 		WHERE mac = ?
 	`, now, now, mac)
 	return err
+}
+
+// UpdateDeviceError updates the last error message for a device
+func (s *Store) UpdateDeviceError(mac, errorMsg string) error {
+	_, err := s.db.Exec(`
+		UPDATE devices SET last_error = ?, updated_at = ?
+		WHERE mac = ?
+	`, errorMsg, time.Now(), mac)
+	return err
+}
+
+// ClearDeviceError clears the last error message for a device
+func (s *Store) ClearDeviceError(mac string) error {
+	return s.UpdateDeviceError(mac, "")
 }
 
 // Settings operations

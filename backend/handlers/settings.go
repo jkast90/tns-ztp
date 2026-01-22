@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net"
+
 	"github.com/gin-gonic/gin"
 	"github.com/ztp-server/backend/db"
 	"github.com/ztp-server/backend/models"
@@ -25,6 +27,7 @@ func (h *SettingsHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.GET("/settings", h.Get)
 	r.PUT("/settings", h.Update)
 	r.POST("/reload", h.Reload)
+	r.GET("/network/addresses", h.GetLocalAddresses)
 }
 
 // Get returns the global settings
@@ -74,4 +77,46 @@ func (h *SettingsHandler) triggerReload() {
 	if h.configReload != nil {
 		go h.configReload()
 	}
+}
+
+// NetworkInterface represents a network interface with its addresses
+type NetworkInterface struct {
+	Name      string   `json:"name"`
+	Addresses []string `json:"addresses"`
+	IsUp      bool     `json:"is_up"`
+	IsLoopback bool    `json:"is_loopback"`
+}
+
+// GetLocalAddresses returns all local network interfaces and their IP addresses
+func (h *SettingsHandler) GetLocalAddresses(c *gin.Context) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+
+	var result []NetworkInterface
+	for _, iface := range interfaces {
+		ni := NetworkInterface{
+			Name:       iface.Name,
+			IsUp:       iface.Flags&net.FlagUp != 0,
+			IsLoopback: iface.Flags&net.FlagLoopback != 0,
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ni.Addresses = append(ni.Addresses, addr.String())
+		}
+
+		// Only include interfaces that are up and have addresses
+		if ni.IsUp && len(ni.Addresses) > 0 {
+			result = append(result, ni)
+		}
+	}
+
+	ok(c, result)
 }

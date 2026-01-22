@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useSettings, useLocalSettings, configureServices } from '@core';
-import type { Settings } from '@core';
+import { useSettings, useLocalSettings, useLocalAddresses, configureServices } from '@core';
+import type { Settings, NetworkInterface } from '@core';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
 import { FormField } from './FormField';
@@ -16,15 +16,17 @@ interface Props {
 export function SettingsDialog({ isOpen, onClose }: Props) {
   const { settings, loading, saving, message, load, save } = useSettings();
   const { settings: localSettings, updateSettings: updateLocalSettings } = useLocalSettings();
+  const { addresses, loading: addressesLoading, refresh: refreshAddresses } = useLocalAddresses();
   const [formData, setFormData] = useState<Settings | null>(null);
   const [localFormData, setLocalFormData] = useState({ apiUrl: '' });
 
   useEffect(() => {
     if (isOpen) {
       load();
+      refreshAddresses();
       setLocalFormData({ apiUrl: localSettings.apiUrl });
     }
-  }, [isOpen, load, localSettings.apiUrl]);
+  }, [isOpen, load, refreshAddresses, localSettings.apiUrl]);
 
   useEffect(() => {
     if (settings) {
@@ -210,6 +212,37 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
                 placeholder="Enrollment password"
               />
             </div>
+          </div>
+
+          <div className="settings-section">
+            <h3>
+              <Icon name="wifi" size={18} />
+              Server Network Interfaces
+            </h3>
+            {addressesLoading ? (
+              <p className="settings-hint">Loading network interfaces...</p>
+            ) : addresses.length === 0 ? (
+              <p className="settings-hint">No network interfaces found</p>
+            ) : (
+              <div className="local-addresses">
+                {addresses
+                  .filter((iface: NetworkInterface) => !iface.is_loopback)
+                  .map((iface: NetworkInterface) => (
+                    <div key={iface.name} className="address-item">
+                      <span className="address-name">{iface.name}</span>
+                      <span className="address-ips">
+                        {iface.addresses
+                          .filter((addr: string) => !addr.includes(':')) // Filter out IPv6
+                          .map((addr: string) => addr.split('/')[0]) // Remove CIDR
+                          .join(', ') || 'No IPv4'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
+            <p className="settings-hint">
+              Use one of these addresses for the API URL when connecting from another device.
+            </p>
           </div>
 
           <div className="settings-section">

@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { useDevices, useTemplates, useVendors, getDefaultTemplateForVendor, setVendorCache } from '../core';
+import { useDevices, useTemplates, useVendors, useSettings, getDefaultTemplateForVendor, setVendorCache } from '../core';
 import type { DeviceFormData } from '../core';
 import type { RootStackParamList, ScanField } from '../navigation/types';
 import {
@@ -42,7 +42,15 @@ export function DeviceFormScreen() {
   const { devices, createDevice, updateDevice, loading } = useDevices({ autoRefresh: false });
   const { templates } = useTemplates({ vendorFilter: 'all' });
   const { vendors } = useVendors();
+  const { settings, load: loadSettings } = useSettings();
   const device = isEditMode ? devices.find((d) => d.mac === mac) : null;
+
+  // Load settings on mount to get DHCP range for IP prefix
+  useEffect(() => {
+    if (!isEditMode) {
+      loadSettings();
+    }
+  }, [isEditMode, loadSettings]);
 
   // Update vendor cache when vendors load (for MAC lookup)
   useEffect(() => {
@@ -50,6 +58,17 @@ export function DeviceFormScreen() {
       setVendorCache(vendors);
     }
   }, [vendors]);
+
+  // Get IP prefix from DHCP range (first 3 octets)
+  const ipPrefix = useMemo(() => {
+    if (settings?.dhcp_range_start) {
+      const parts = settings.dhcp_range_start.split('.');
+      if (parts.length === 4) {
+        return `${parts[0]}.${parts[1]}.${parts[2]}.`;
+      }
+    }
+    return '';
+  }, [settings?.dhcp_range_start]);
 
   const initialData = useMemo(() => {
     // For edit mode, use device data
@@ -80,8 +99,12 @@ export function DeviceFormScreen() {
         config_template,
       };
     }
-    return emptyFormData;
-  }, [isEditMode, device, params]);
+    // For new device with no params, pre-fill IP prefix from DHCP range
+    return {
+      ...emptyFormData,
+      ip: ipPrefix,
+    };
+  }, [isEditMode, device, params, ipPrefix]);
 
   const handleFormSubmit = useCallback(
     async (data: DeviceFormData) => {
@@ -126,6 +149,13 @@ export function DeviceFormScreen() {
       });
     }
   }, [device, isEditMode, resetForm]);
+
+  // Auto-fill IP prefix when settings load (for new devices without params)
+  useEffect(() => {
+    if (!isEditMode && !params?.ip && ipPrefix && !formData.ip) {
+      updateFormData({ ip: ipPrefix });
+    }
+  }, [isEditMode, params?.ip, ipPrefix, formData.ip, updateFormData]);
 
   // Handle scanned values from barcode scanner
   useScannedValue(

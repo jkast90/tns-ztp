@@ -15,6 +15,7 @@ export interface Device {
   status: DeviceStatus;
   last_seen?: string;
   last_backup?: string;
+  last_error?: string;
   created_at: string;
   updated_at: string;
 }
@@ -209,6 +210,14 @@ export function getDefaultTemplateForVendor(vendorId: string): string {
   }
   // Fallback to generic-switch if vendor not found or no default_template set
   return 'generic-switch';
+}
+
+// Network interface types
+export interface NetworkInterface {
+  name: string;
+  addresses: string[];
+  is_up: boolean;
+  is_loopback: boolean;
 }
 
 // API Response types

@@ -16,6 +16,7 @@ type Device struct {
 	Status         string     `json:"status"` // online, offline, provisioning
 	LastSeen       *time.Time `json:"last_seen,omitempty"`
 	LastBackup     *time.Time `json:"last_backup,omitempty"`
+	LastError      string     `json:"last_error,omitempty"` // Last error message from backup/provisioning
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }

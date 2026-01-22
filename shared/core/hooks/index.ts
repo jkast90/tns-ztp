@@ -70,3 +70,7 @@ export {
   type LocalSettings,
   type UseLocalSettingsReturn,
 } from './useLocalSettings';
+export {
+  useLocalAddresses,
+  type UseLocalAddressesReturn,
+} from './useLocalAddresses';

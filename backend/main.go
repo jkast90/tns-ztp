@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -30,7 +32,7 @@ func main() {
 	defer store.Close()
 
 	// Initialize DHCP config manager
-	configMgr := dhcp.NewConfigManager(store, cfg.DnsmasqConfig, cfg.TFTPDir, cfg.TemplatesDir, cfg.DnsmasqPID)
+	configMgr := dhcp.NewConfigManager(store, cfg.DnsmasqConfig, cfg.TFTPDir, cfg.TemplatesDir, cfg.DnsmasqPID, cfg.DHCPInterface, cfg.LeasePath)
 
 	// Initialize backup service
 	backupSvc := backup.NewService(store, cfg.BackupDir)
@@ -81,6 +83,11 @@ func main() {
 		log.Printf("Warning: failed to generate initial config: %v", err)
 	}
 
+	// Start dnsmasq after config is generated (if not already running)
+	if err := startDnsmasq(cfg.DnsmasqConfig, cfg.DnsmasqPID); err != nil {
+		log.Printf("Warning: failed to start dnsmasq: %v", err)
+	}
+
 	// Setup router
 	router := gin.Default()
 	router.Use(corsMiddleware())
@@ -112,10 +119,10 @@ func main() {
 	handlers.NewConfigServerHandler(store, wsHub, cfg.TFTPDir).RegisterRoutes(router)
 
 	// Serve static frontend files
-	router.Static("/assets", "/app/frontend/assets")
-	router.StaticFile("/", "/app/frontend/index.html")
+	router.Static("/assets", cfg.FrontendDir+"/assets")
+	router.StaticFile("/", cfg.FrontendDir+"/index.html")
 	router.NoRoute(func(c *gin.Context) {
-		c.File("/app/frontend/index.html")
+		c.File(cfg.FrontendDir + "/index.html")
 	})
 
 	// Start server in goroutine
@@ -132,6 +139,41 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down ZTP server...")
+}
+
+func startDnsmasq(configPath, pidFile string) error {
+	// Check if dnsmasq is already running
+	if pidData, err := os.ReadFile(pidFile); err == nil {
+		var pid int
+		if _, err := fmt.Sscanf(string(pidData), "%d", &pid); err == nil {
+			if process, err := os.FindProcess(pid); err == nil {
+				if err := process.Signal(syscall.Signal(0)); err == nil {
+					log.Printf("dnsmasq already running (PID: %d)", pid)
+					// Send SIGHUP to reload config
+					process.Signal(syscall.SIGHUP)
+					return nil
+				}
+			}
+		}
+	}
+
+	// Start dnsmasq
+	log.Println("Starting dnsmasq...")
+	cmd := exec.Command("dnsmasq", "--keep-in-foreground", "--log-facility=-", "--conf-file="+configPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start dnsmasq: %w", err)
+	}
+
+	// Write PID file
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644); err != nil {
+		log.Printf("Warning: could not write dnsmasq PID file: %v", err)
+	}
+
+	log.Printf("dnsmasq started (PID: %d)", cmd.Process.Pid)
+	return nil
 }
 
 func corsMiddleware() gin.HandlerFunc {

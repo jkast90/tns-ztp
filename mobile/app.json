@@ -24,7 +24,11 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.ztpserver.manager",
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,7 +39,13 @@
         {
           "cameraPermission": "Allow ZTP Manager to access your camera to scan device barcodes."
         }
-      ]
-    ]
+      ],
+      "./plugins/withCleartextTraffic"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2da67ceb-d916-462a-9456-55f25c856f31"
+      }
+    }
   }
 }

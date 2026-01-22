@@ -12,6 +12,8 @@ type Config struct {
 	LeasePath     string
 	DnsmasqPID    string
 	ListenAddr    string
+	DHCPInterface string
+	FrontendDir   string
 }
 
 // Load returns configuration from environment variables with defaults
@@ -25,6 +27,8 @@ func Load() *Config {
 		LeasePath:     getEnv("LEASE_PATH", "/var/lib/misc/dnsmasq.leases"),
 		DnsmasqPID:    getEnv("DNSMASQ_PID", "/var/run/dnsmasq.pid"),
 		ListenAddr:    getEnv("LISTEN_ADDR", ":8080"),
+		DHCPInterface: getEnv("DHCP_INTERFACE", "eth0"),
+		FrontendDir:   getEnv("FRONTEND_DIR", "/app/frontend"),
 	}
 }
 
